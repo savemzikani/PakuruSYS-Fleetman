@@ -4,7 +4,8 @@ export type CompanyStatus = "active" | "inactive" | "suspended"
 export type VehicleStatus = "active" | "maintenance" | "out_of_service" | "retired"
 export type LoadStatus = "pending" | "assigned" | "in_transit" | "delivered" | "cancelled"
 export type PaymentStatus = "pending" | "paid" | "overdue" | "cancelled"
-export type DocumentType = "invoice" | "pod" | "customs" | "permit" | "insurance" | "other"
+export type QuoteStatus = "draft" | "sent" | "accepted" | "rejected" | "expired" | "converted"
+export type DocumentType = "invoice" | "pod" | "customs" | "permit" | "insurance" | "quote" | "other"
 export type CurrencyCode =
   | "USD"
   | "ZAR"
@@ -175,11 +176,34 @@ export interface Invoice {
   load?: Load
 }
 
+export interface Quote {
+  id: string
+  company_id: string
+  customer_id: string
+  load_id?: string
+  quote_number: string
+  quote_date: string
+  valid_until: string
+  subtotal: number
+  tax_amount: number
+  total_amount: number
+  currency: CurrencyCode
+  status: QuoteStatus
+  converted_to_invoice_id?: string
+  notes?: string
+  terms?: string
+  created_at: string
+  updated_at: string
+  customer?: Customer
+  load?: Load
+}
+
 export interface Document {
   id: string
   company_id: string
   load_id?: string
   invoice_id?: string
+  quote_id?: string
   document_type: DocumentType
   file_name: string
   file_path: string

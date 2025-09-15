@@ -5,7 +5,7 @@ import type React from "react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { Profile, UserRole } from "@/lib/types/database"
-import { BarChart3, Building2, FileText, Home, LogOut, Package, Settings, Truck, Users, Wallet } from "lucide-react"
+import { BarChart3, Building2, FileText, Home, LogOut, Package, Settings, Truck, Users, Wallet, Calculator } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
@@ -51,6 +51,12 @@ const navItems: NavItem[] = [
     title: "Drivers",
     href: "/drivers",
     icon: Users,
+    roles: ["super_admin", "company_admin", "manager"],
+  },
+  {
+    title: "Quotes",
+    href: "/quotes",
+    icon: Calculator,
     roles: ["super_admin", "company_admin", "manager"],
   },
   {
