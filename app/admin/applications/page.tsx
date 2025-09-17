@@ -1,11 +1,9 @@
-"use client"
-
-import { useState } from "react"
+import { redirect } from "next/navigation"
+import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ApplicationActions } from "@/components/admin/application-actions"
 import {
   Dialog,
   DialogContent,
@@ -15,74 +13,38 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { Search, Filter, Eye, Check, X, Clock, Building2, MapPin, Phone, Mail, FileText } from "lucide-react"
+import { Eye, Clock, Building2, MapPin, Phone, Mail, FileText } from "lucide-react"
 
-const applications = [
-  {
-    id: 1,
-    companyName: "Trans Africa Logistics",
-    contactPerson: "John Mthembu",
-    email: "john@transafrica.co.za",
-    phone: "+27 11 123 4567",
-    country: "South Africa",
-    city: "Johannesburg",
-    fleetSize: 25,
-    businessType: "Cross-border freight",
-    registrationNumber: "2023/123456/07",
-    taxNumber: "9876543210",
-    status: "pending",
-    submittedAt: "2024-01-15T10:30:00Z",
-    documents: ["Business Registration", "Tax Certificate", "Transport License"],
-  },
-  {
-    id: 2,
-    companyName: "Desert Express Transport",
-    contactPerson: "Maria Santos",
-    email: "maria@desertexpress.na",
-    phone: "+264 61 234 567",
-    country: "Namibia",
-    city: "Windhoek",
-    fleetSize: 15,
-    businessType: "Regional distribution",
-    registrationNumber: "CC/2023/1234",
-    taxNumber: "1234567890",
-    status: "under_review",
-    submittedAt: "2024-01-14T14:20:00Z",
-    documents: ["Business Registration", "Tax Certificate", "Insurance Certificate"],
-  },
-  {
-    id: 3,
-    companyName: "Kalahari Freight Solutions",
-    contactPerson: "David Mogale",
-    email: "david@kalahari.bw",
-    phone: "+267 71 345 678",
-    country: "Botswana",
-    city: "Gaborone",
-    fleetSize: 8,
-    businessType: "Local delivery",
-    registrationNumber: "BW00001234567",
-    taxNumber: "P00123456789",
-    status: "approved",
-    submittedAt: "2024-01-10T09:15:00Z",
-    documents: ["Business Registration", "Tax Certificate", "Transport License", "Insurance Certificate"],
-  },
-]
+export default async function ApplicationsPage() {
+  const supabase = await createClient()
 
-export default function ApplicationsPage() {
-  const [searchTerm, setSearchTerm] = useState("")
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [selectedApplication, setSelectedApplication] = useState<(typeof applications)[0] | null>(null)
+  // Get authenticated user
+  const {
+    data: { user: authUser },
+    error: authError,
+  } = await supabase.auth.getUser()
 
-  const filteredApplications = applications.filter((app) => {
-    const matchesSearch =
-      app.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      app.contactPerson.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      app.email.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = statusFilter === "all" || app.status === statusFilter
-    return matchesSearch && matchesStatus
-  })
+  if (authError || !authUser) {
+    redirect("/auth/login")
+  }
+
+  // Get user profile
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", authUser.id)
+    .single()
+
+  if (!profile || profile.role !== "super_admin") {
+    redirect("/dashboard")
+  }
+
+  // Fetch fleet applications from database
+  const { data: applications } = await supabase
+    .from("fleet_applications")
+    .select("*")
+    .order("created_at", { ascending: false })
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -99,16 +61,6 @@ export default function ApplicationsPage() {
     }
   }
 
-  const handleApprove = (id: number) => {
-    console.log("[v0] Approving application:", id)
-    // Implementation for approval
-  }
-
-  const handleReject = (id: number) => {
-    console.log("[v0] Rejecting application:", id)
-    // Implementation for rejection
-  }
-
   return (
     <div className="space-y-6">
       <div>
@@ -116,40 +68,15 @@ export default function ApplicationsPage() {
         <p className="text-muted-foreground">Review and manage company registration requests</p>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search applications..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-full sm:w-[180px]">
-            <Filter className="h-4 w-4 mr-2" />
-            <SelectValue placeholder="Filter by status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="under_review">Under Review</SelectItem>
-            <SelectItem value="approved">Approved</SelectItem>
-            <SelectItem value="rejected">Rejected</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
       <div className="grid gap-4">
-        {filteredApplications.map((application) => (
+        {applications && applications.length > 0 ? applications.map((application) => (
           <Card key={application.id}>
             <CardHeader>
               <div className="flex items-start justify-between">
                 <div>
                   <CardTitle className="flex items-center gap-2">
                     <Building2 className="h-5 w-5" />
-                    {application.companyName}
+                    {application.company_name}
                   </CardTitle>
                   <CardDescription className="flex items-center gap-4 mt-2">
                     <span className="flex items-center gap-1">
@@ -158,7 +85,7 @@ export default function ApplicationsPage() {
                     </span>
                     <span className="flex items-center gap-1">
                       <Clock className="h-4 w-4" />
-                      {new Date(application.submittedAt).toLocaleDateString()}
+                      {new Date(application.created_at).toLocaleDateString()}
                     </span>
                   </CardDescription>
                 </div>
@@ -178,110 +105,91 @@ export default function ApplicationsPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <FileText className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">Fleet Size: {application.fleetSize} vehicles</span>
+                    <span className="text-sm">Fleet Size: {application.fleet_size || 'N/A'} vehicles</span>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <p className="text-sm">
-                    <strong>Contact:</strong> {application.contactPerson}
+                    <strong>Contact:</strong> {application.contact_person}
                   </p>
                   <p className="text-sm">
-                    <strong>Business Type:</strong> {application.businessType}
+                    <strong>Business Type:</strong> {application.business_type || 'N/A'}
                   </p>
                   <p className="text-sm">
-                    <strong>Registration:</strong> {application.registrationNumber}
+                    <strong>Registration:</strong> {application.registration_number || 'N/A'}
                   </p>
                 </div>
               </div>
 
               <div className="flex gap-2 mt-4">
+                <ApplicationActions application={application} />
                 <Dialog>
                   <DialogTrigger asChild>
-                    <Button variant="outline" size="sm" onClick={() => setSelectedApplication(application)}>
+                    <Button variant="outline" size="sm">
                       <Eye className="h-4 w-4 mr-2" />
                       View Details
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="max-w-2xl">
                     <DialogHeader>
-                      <DialogTitle>{selectedApplication?.companyName}</DialogTitle>
-                      <DialogDescription>Complete application details and documents</DialogDescription>
+                      <DialogTitle>{application.company_name}</DialogTitle>
+                      <DialogDescription>Complete application details</DialogDescription>
                     </DialogHeader>
-                    {selectedApplication && (
-                      <div className="space-y-4">
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <div>
-                            <Label>Contact Person</Label>
-                            <p className="text-sm text-muted-foreground">{selectedApplication.contactPerson}</p>
-                          </div>
-                          <div>
-                            <Label>Email</Label>
-                            <p className="text-sm text-muted-foreground">{selectedApplication.email}</p>
-                          </div>
-                          <div>
-                            <Label>Phone</Label>
-                            <p className="text-sm text-muted-foreground">{selectedApplication.phone}</p>
-                          </div>
-                          <div>
-                            <Label>Location</Label>
-                            <p className="text-sm text-muted-foreground">
-                              {selectedApplication.city}, {selectedApplication.country}
-                            </p>
-                          </div>
-                          <div>
-                            <Label>Registration Number</Label>
-                            <p className="text-sm text-muted-foreground">{selectedApplication.registrationNumber}</p>
-                          </div>
-                          <div>
-                            <Label>Tax Number</Label>
-                            <p className="text-sm text-muted-foreground">{selectedApplication.taxNumber}</p>
-                          </div>
+                    <div className="space-y-4">
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <Label>Contact Person</Label>
+                          <p className="text-sm text-muted-foreground">{application.contact_person}</p>
                         </div>
                         <div>
-                          <Label>Documents Submitted</Label>
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {selectedApplication.documents.map((doc, i) => (
-                              <Badge key={i} variant="outline">
-                                {doc}
-                              </Badge>
-                            ))}
-                          </div>
+                          <Label>Email</Label>
+                          <p className="text-sm text-muted-foreground">{application.email}</p>
                         </div>
                         <div>
-                          <Label>Review Notes</Label>
-                          <Textarea placeholder="Add review notes..." className="mt-2" />
+                          <Label>Phone</Label>
+                          <p className="text-sm text-muted-foreground">{application.phone}</p>
+                        </div>
+                        <div>
+                          <Label>Location</Label>
+                          <p className="text-sm text-muted-foreground">
+                            {application.city}, {application.country}
+                          </p>
+                        </div>
+                        <div>
+                          <Label>Registration Number</Label>
+                          <p className="text-sm text-muted-foreground">{application.registration_number || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <Label>Tax Number</Label>
+                          <p className="text-sm text-muted-foreground">{application.tax_number || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <Label>Fleet Size</Label>
+                          <p className="text-sm text-muted-foreground">{application.fleet_size || 'N/A'} vehicles</p>
+                        </div>
+                        <div>
+                          <Label>Business Type</Label>
+                          <p className="text-sm text-muted-foreground">{application.business_type || 'N/A'}</p>
                         </div>
                       </div>
-                    )}
+                    </div>
                     <DialogFooter>
-                      <Button variant="outline" onClick={() => handleReject(selectedApplication?.id || 0)}>
-                        <X className="h-4 w-4 mr-2" />
-                        Reject
-                      </Button>
-                      <Button onClick={() => handleApprove(selectedApplication?.id || 0)}>
-                        <Check className="h-4 w-4 mr-2" />
-                        Approve
+                      <Button variant="outline">
+                        Close
                       </Button>
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
-
-                {application.status === "pending" && (
-                  <>
-                    <Button size="sm" onClick={() => handleApprove(application.id)}>
-                      <Check className="h-4 w-4 mr-2" />
-                      Approve
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => handleReject(application.id)}>
-                      <X className="h-4 w-4 mr-2" />
-                      Reject
-                    </Button>
-                  </>
-                )}
               </div>
             </CardContent>
           </Card>
-        ))}
+        )) : (
+          <div className="text-center py-8">
+            <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-semibold mb-2">No applications found</h3>
+            <p className="text-muted-foreground">Fleet applications will appear here once submitted.</p>
+          </div>
+        )}
       </div>
     </div>
   )

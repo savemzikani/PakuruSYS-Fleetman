@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { renderToBuffer } from "@react-pdf/renderer"
 import { InvoicePDF } from "@/lib/pdf/invoice-pdf"
+import { InvoicePDF } from "@/lib/pdf/invoice-pdf"
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {

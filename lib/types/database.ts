@@ -192,10 +192,26 @@ export interface Quote {
   converted_to_invoice_id?: string
   notes?: string
   terms?: string
+  created_by?: string
+  sent_at?: string
+  accepted_at?: string
+  rejected_at?: string
   created_at: string
   updated_at: string
   customer?: Customer
   load?: Load
+  quote_items?: QuoteItem[]
+}
+
+export interface QuoteItem {
+  id: string
+  quote_id: string
+  description: string
+  quantity: number
+  unit_price: number
+  line_total: number
+  sort_order: number
+  created_at: string
 }
 
 export interface Document {

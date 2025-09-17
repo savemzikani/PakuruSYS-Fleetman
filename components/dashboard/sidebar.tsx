@@ -104,7 +104,7 @@ export function Sidebar({ user, className }: SidebarProps) {
         <div className="flex items-center gap-2">
           <Truck className="h-8 w-8 text-primary" />
           <div>
-            <h1 className="text-lg font-bold text-sidebar-foreground">SADC Logistics</h1>
+            <h1 className="text-lg font-bold text-sidebar-foreground">PakuruSYS Fleetman</h1>
             {user.company && <p className="text-xs text-muted-foreground">{user.company.name}</p>}
           </div>
         </div>

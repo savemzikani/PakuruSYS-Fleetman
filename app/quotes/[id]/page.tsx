@@ -3,8 +3,9 @@ import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Calculator, ArrowLeft, Edit, Send, FileDown, CheckCircle, XCircle } from "lucide-react"
+import { Calculator, ArrowLeft, Edit, FileDown } from "lucide-react"
 import Link from "next/link"
+import { QuoteActions } from "@/components/quotes/quote-actions"
 
 interface QuoteDetailPageProps {
   params: { id: string }
@@ -112,22 +113,13 @@ export default async function QuoteDetailPage({ params }: QuoteDetailPageProps) 
               Edit Quote
             </Button>
           </Link>
-          {quote.status === "draft" && (
-            <Button>
-              <Send className="h-4 w-4 mr-2" />
-              Send Quote
-            </Button>
-          )}
-          {quote.status === "accepted" && !quote.converted_to_invoice_id && (
-            <Button>
+          <QuoteActions id={quote.id} status={quote.status} convertedToInvoiceId={quote.converted_to_invoice_id} />
+          <Link href={`/api/pdf/quote/${quote.id}`} prefetch={false}>
+            <Button variant="outline">
               <FileDown className="h-4 w-4 mr-2" />
-              Convert to Invoice
+              Download PDF
             </Button>
-          )}
-          <Button variant="outline">
-            <FileDown className="h-4 w-4 mr-2" />
-            Download PDF
-          </Button>
+          </Link>
         </div>
       </div>
 
@@ -356,32 +348,7 @@ export default async function QuoteDetailPage({ params }: QuoteDetailPageProps) 
                 </Button>
               </Link>
               
-              {quote.status === "draft" && (
-                <Button className="w-full justify-start" variant="outline">
-                  <Send className="h-4 w-4 mr-2" />
-                  Send to Customer
-                </Button>
-              )}
-
-              {quote.status === "sent" && (
-                <>
-                  <Button className="w-full justify-start" variant="outline">
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    Mark as Accepted
-                  </Button>
-                  <Button className="w-full justify-start" variant="outline">
-                    <XCircle className="h-4 w-4 mr-2" />
-                    Mark as Rejected
-                  </Button>
-                </>
-              )}
-
-              {quote.status === "accepted" && !quote.converted_to_invoice_id && (
-                <Button className="w-full justify-start" variant="outline">
-                  <FileDown className="h-4 w-4 mr-2" />
-                  Convert to Invoice
-                </Button>
-              )}
+              <QuoteActions id={quote.id} status={quote.status} convertedToInvoiceId={quote.converted_to_invoice_id} />
 
               <Button className="w-full justify-start" variant="outline">
                 <FileDown className="h-4 w-4 mr-2" />

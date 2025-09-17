@@ -2,9 +2,9 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { MetricCard } from "@/components/dashboard/metric-card"
 import { RecentActivity } from "@/components/dashboard/recent-activity"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
+import { RevenueChart } from "@/components/dashboard/revenue-chart"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Package, Truck, Users, DollarSign, TrendingUp, AlertTriangle } from "lucide-react"
+import { Package, Truck, Users, DollarSign, AlertTriangle } from "lucide-react"
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -31,6 +31,11 @@ export default async function DashboardPage() {
 
   if (!profile) {
     redirect("/auth/login")
+  }
+
+  // Redirect Super Admin to admin panel
+  if (profile.role === "super_admin") {
+    redirect("/admin")
   }
 
   // Get dashboard metrics based on user role and company
@@ -131,25 +136,7 @@ export default async function DashboardPage() {
       {/* Charts and Activity */}
       <div className="grid gap-6 md:grid-cols-2">
         {/* Revenue Chart */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5" />
-              Revenue Trend
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip formatter={(value) => [`$${Number(value).toLocaleString()}`, "Revenue"]} />
-                <Bar dataKey="revenue" fill="hsl(var(--primary))" />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+        <RevenueChart data={chartData} />
 
         {/* Recent Activity */}
         <RecentActivity activities={recentActivity || []} />
