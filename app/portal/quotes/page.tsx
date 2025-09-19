@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import dynamic from "next/dynamic"
 import { createClient } from "@/lib/supabase/client"
 import { useUser } from "@/lib/hooks/use-user"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 
-export default function PortalQuotesPage() {
+function PortalQuotesPageContent() {
   const { user } = useUser()
   const [quotes, setQuotes] = useState<any[]>([])
   const supabase = createClient()
@@ -71,5 +72,13 @@ export default function PortalQuotesPage() {
     </div>
   )
 }
+
+// Dynamic import to prevent SSR issues
+const PortalQuotesPage = dynamic(() => Promise.resolve(PortalQuotesPageContent), {
+  ssr: false,
+  loading: () => <div>Loading quotes...</div>
+})
+
+export default PortalQuotesPage
 
 

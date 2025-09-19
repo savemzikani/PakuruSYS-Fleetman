@@ -12,10 +12,37 @@ interface ActivityItem {
 }
 
 interface RecentActivityProps {
-  activities: ActivityItem[]
+  activities?: ActivityItem[] | null
 }
 
 export function RecentActivity({ activities }: RecentActivityProps) {
+  // Handle loading state
+  if (!activities) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Activity</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">Loading activities...</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // Handle empty state
+  if (activities.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Activity</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">No recent activity to display</p>
+        </CardContent>
+      </Card>
+    )
+  }
   const getStatusColor = (status?: string) => {
     switch (status) {
       case "delivered":
