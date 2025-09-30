@@ -29,9 +29,9 @@ export function Header({ user, onMenuClick }: HeaderProps) {
         </Button>
         <div className="text-right">
           <p className="text-sm font-medium">
-            {user.first_name} {user.last_name}
+            {user?.first_name || ''} {user?.last_name || ''}
           </p>
-          <p className="text-xs text-muted-foreground capitalize">{user.role.replace("_", " ")}</p>
+          <p className="text-xs text-muted-foreground capitalize">{user?.role?.replace("_", " ") || 'User'}</p>
         </div>
       </div>
     </header>

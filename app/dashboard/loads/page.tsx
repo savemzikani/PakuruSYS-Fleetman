@@ -89,7 +89,7 @@ export default async function LoadsPage() {
           <h1 className="text-3xl font-bold text-foreground">Load Management</h1>
           <p className="text-muted-foreground">Manage shipments, assignments, and tracking</p>
         </div>
-        <Link href="/loads/create">
+        <Link href="/dashboard/loads/create">
           <Button>
             <Plus className="h-4 w-4 mr-2" />
             Create Load
@@ -258,25 +258,25 @@ export default async function LoadsPage() {
               </div>
 
               <div className="flex gap-2">
-                <Link href={`/loads/${load.id}`}>
+                <Link href={`/dashboard/loads/${load.id}`}>
                   <Button variant="outline" size="sm">
                     View Details
                   </Button>
                 </Link>
                 {load.status === "pending" && (
-                  <Link href={`/loads/${load.id}/assign`}>
+                  <Link href={`/dashboard/loads/${load.id}/assign`}>
                     <Button variant="outline" size="sm">
                       Assign Vehicle
                     </Button>
                   </Link>
                 )}
-                <Link href={`/loads/${load.id}/track`}>
+                <Link href={`/dashboard/loads/${load.id}/track`}>
                   <Button variant="outline" size="sm">
                     <MapPin className="h-4 w-4 mr-1" />
                     Track
                   </Button>
                 </Link>
-                <Link href={`/loads/${load.id}/edit`}>
+                <Link href={`/dashboard/loads/${load.id}/edit`}>
                   <Button variant="outline" size="sm">
                     Edit
                   </Button>
@@ -292,7 +292,7 @@ export default async function LoadsPage() {
               <Package className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-semibold mb-2">No loads found</h3>
               <p className="text-muted-foreground mb-4">Get started by creating your first shipment.</p>
-              <Link href="/loads/create">
+              <Link href="/dashboard/loads/create">
                 <Button>
                   <Plus className="h-4 w-4 mr-2" />
                   Create Load
