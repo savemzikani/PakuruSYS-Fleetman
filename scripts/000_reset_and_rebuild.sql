@@ -294,13 +294,19 @@ ALTER TABLE public.quote_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
 
 -- 5) Minimal policies (view own company data)
-CREATE POLICY IF NOT EXISTS companies_select ON public.companies
+DO $$ BEGIN
+  -- Drop existing policies if they exist
+  DROP POLICY IF EXISTS companies_select ON public.companies;
+  DROP POLICY IF EXISTS profiles_self_select ON public.profiles;
+END $$;
+
+CREATE POLICY companies_select ON public.companies
   FOR SELECT USING (
     id IN (SELECT company_id FROM public.profiles WHERE id = auth.uid()) OR
     EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'super_admin')
   );
 
-CREATE POLICY IF NOT EXISTS profiles_self_select ON public.profiles
+CREATE POLICY profiles_self_select ON public.profiles
   FOR SELECT USING (id = auth.uid());
 
 -- 6) Useful indexes
@@ -326,28 +332,139 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DO $$ BEGIN IF to_regclass('public.update_companies_updated_at') IS NOT NULL THEN EXECUTE 'DROP TRIGGER update_companies_updated_at ON public.companies'; END IF; END $$;
-CREATE TRIGGER update_companies_updated_at BEFORE UPDATE ON public.companies FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+-- Safe trigger recreation: drop if exists, create if not exists
+DO $$ 
+DECLARE
+  trigger_exists boolean;
+BEGIN
+  -- Companies trigger
+  DROP TRIGGER IF EXISTS update_companies_updated_at ON public.companies;
+  SELECT EXISTS (
+    SELECT 1 FROM pg_trigger 
+    WHERE tgname = 'update_companies_updated_at'
+    AND tgrelid = 'public.companies'::regclass
+  ) INTO trigger_exists;
+  IF NOT trigger_exists THEN
+    CREATE TRIGGER update_companies_updated_at 
+    BEFORE UPDATE ON public.companies 
+    FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+  END IF;
 
-DO $$ BEGIN IF to_regclass('public.update_profiles_updated_at') IS NOT NULL THEN EXECUTE 'DROP TRIGGER update_profiles_updated_at ON public.profiles'; END IF; END $$;
-CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+  -- Profiles trigger
+  DROP TRIGGER IF EXISTS update_profiles_updated_at ON public.profiles;
+  SELECT EXISTS (
+    SELECT 1 FROM pg_trigger 
+    WHERE tgname = 'update_profiles_updated_at'
+    AND tgrelid = 'public.profiles'::regclass
+  ) INTO trigger_exists;
+  IF NOT trigger_exists THEN
+    CREATE TRIGGER update_profiles_updated_at 
+    BEFORE UPDATE ON public.profiles 
+    FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+  END IF;
 
-DO $$ BEGIN IF to_regclass('public.update_vehicles_updated_at') IS NOT NULL THEN EXECUTE 'DROP TRIGGER update_vehicles_updated_at ON public.vehicles'; END IF; END $$;
-CREATE TRIGGER update_vehicles_updated_at BEFORE UPDATE ON public.vehicles FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+  -- Vehicles trigger
+  DROP TRIGGER IF EXISTS update_vehicles_updated_at ON public.vehicles;
+  SELECT EXISTS (
+    SELECT 1 FROM pg_trigger 
+    WHERE tgname = 'update_vehicles_updated_at'
+    AND tgrelid = 'public.vehicles'::regclass
+  ) INTO trigger_exists;
+  IF NOT trigger_exists THEN
+    CREATE TRIGGER update_vehicles_updated_at 
+    BEFORE UPDATE ON public.vehicles 
+    FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+  END IF;
 
-DO $$ BEGIN IF to_regclass('public.update_drivers_updated_at') IS NOT NULL THEN EXECUTE 'DROP TRIGGER update_drivers_updated_at ON public.drivers'; END IF; END $$;
-CREATE TRIGGER update_drivers_updated_at BEFORE UPDATE ON public.drivers FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+  -- Drivers trigger
+  DROP TRIGGER IF EXISTS update_drivers_updated_at ON public.drivers;
+  SELECT EXISTS (
+    SELECT 1 FROM pg_trigger 
+    WHERE tgname = 'update_drivers_updated_at'
+    AND tgrelid = 'public.drivers'::regclass
+  ) INTO trigger_exists;
+  IF NOT trigger_exists THEN
+    CREATE TRIGGER update_drivers_updated_at 
+    BEFORE UPDATE ON public.drivers 
+    FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+  END IF;
 
-DO $$ BEGIN IF to_regclass('public.update_customers_updated_at') IS NOT NULL THEN EXECUTE 'DROP TRIGGER update_customers_updated_at ON public.customers'; END IF; END $$;
-CREATE TRIGGER update_customers_updated_at BEFORE UPDATE ON public.customers FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+  -- Customers trigger
+  DROP TRIGGER IF EXISTS update_customers_updated_at ON public.customers;
+  SELECT EXISTS (
+    SELECT 1 FROM pg_trigger 
+    WHERE tgname = 'update_customers_updated_at'
+    AND tgrelid = 'public.customers'::regclass
+  ) INTO trigger_exists;
+  IF NOT trigger_exists THEN
+    CREATE TRIGGER update_customers_updated_at 
+    BEFORE UPDATE ON public.customers 
+    FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+  END IF;
 
-DO $$ BEGIN IF to_regclass('public.update_loads_updated_at') IS NOT NULL THEN EXECUTE 'DROP TRIGGER update_loads_updated_at ON public.loads'; END IF; END $$;
-CREATE TRIGGER update_loads_updated_at BEFORE UPDATE ON public.loads FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+  -- Loads trigger
+  DROP TRIGGER IF EXISTS update_loads_updated_at ON public.loads;
+  SELECT EXISTS (
+    SELECT 1 FROM pg_trigger 
+    WHERE tgname = 'update_loads_updated_at'
+    AND tgrelid = 'public.loads'::regclass
+  ) INTO trigger_exists;
+  IF NOT trigger_exists THEN
+    CREATE TRIGGER update_loads_updated_at 
+    BEFORE UPDATE ON public.loads 
+    FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+  END IF;
 
-DO $$ BEGIN IF to_regclass('public.update_invoices_updated_at') IS NOT NULL THEN EXECUTE 'DROP TRIGGER update_invoices_updated_at ON public.invoices'; END IF; END $$;
-CREATE TRIGGER update_invoices_updated_at BEFORE UPDATE ON public.invoices FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+  -- Invoices trigger
+  DROP TRIGGER IF EXISTS update_invoices_updated_at ON public.invoices;
+  SELECT EXISTS (
+    SELECT 1 FROM pg_trigger 
+    WHERE tgname = 'update_invoices_updated_at'
+    AND tgrelid = 'public.invoices'::regclass
+  ) INTO trigger_exists;
+  IF NOT trigger_exists THEN
+    CREATE TRIGGER update_invoices_updated_at 
+    BEFORE UPDATE ON public.invoices 
+    FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+  END IF;
 
-DO $$ BEGIN IF to_regclass('public.update_quotes_updated_at') IS NOT NULL THEN EXECUTE 'DROP TRIGGER update_quotes_updated_at ON public.quotes'; END IF; END $$;
-CREATE TRIGGER update_quotes_updated_at BEFORE UPDATE ON public.quotes FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+  -- Quotes trigger
+  DROP TRIGGER IF EXISTS update_quotes_updated_at ON public.quotes;
+  SELECT EXISTS (
+    SELECT 1 FROM pg_trigger 
+    WHERE tgname = 'update_quotes_updated_at'
+    AND tgrelid = 'public.quotes'::regclass
+  ) INTO trigger_exists;
+  IF NOT trigger_exists THEN
+    CREATE TRIGGER update_quotes_updated_at 
+    BEFORE UPDATE ON public.quotes 
+    FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+  END IF;
+END $$;
+
+
+
+-- 8) Ensure profiles role constraint matches current enum labels
+-- This block mirrors scripts/017_fix_profiles_role_constraint.sql so a full
+-- rebuild will correct any legacy constraint that uses old label text.
+DO $$
+BEGIN
+  -- Drop old constraint if it exists
+  IF EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE table_schema = 'public' AND table_name = 'profiles' AND constraint_name = 'profiles_role_check'
+  ) THEN
+    ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
+  END IF;
+
+  -- Recreate constraint using the expected enum labels. Adjust this list if you
+  -- intentionally use different labels in your deployment.
+  ALTER TABLE public.profiles
+    ADD CONSTRAINT profiles_role_check CHECK (
+      (role)::text = ANY (ARRAY['super_admin'::text, 'company_admin'::text, 'manager'::text, 'dispatcher'::text, 'driver'::text, 'customer'::text])
+    );
+EXCEPTION WHEN others THEN
+  RAISE NOTICE 'Could not recreate profiles_role_check: %', SQLERRM;
+END $$;
 
 
