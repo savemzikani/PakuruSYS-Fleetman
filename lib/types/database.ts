@@ -1,5 +1,5 @@
 // Database types for the SADC Logistics System
-export type UserRole = "super_admin" | "company_admin" | "manager" | "dispatcher" | "driver"
+export type UserRole = "super_admin" | "company_admin" | "manager" | "dispatcher" | "driver" | "customer"
 export type CompanyStatus = "active" | "inactive" | "suspended"
 export type VehicleStatus = "active" | "maintenance" | "out_of_service" | "retired"
 export type LoadStatus = "pending" | "assigned" | "in_transit" | "delivered" | "cancelled"
@@ -43,6 +43,7 @@ export interface Company {
 export interface Profile {
   id: string
   company_id?: string
+  customer_id?: string
   first_name: string
   last_name: string
   email: string
@@ -123,10 +124,12 @@ export interface Load {
   volume_m3?: number
   pickup_address: string
   pickup_city?: string
+  pickup_state?: string
   pickup_country?: string
   pickup_date?: string
   delivery_address: string
   delivery_city?: string
+  delivery_state?: string
   delivery_country?: string
   delivery_date?: string
   status: LoadStatus
@@ -136,6 +139,9 @@ export interface Load {
   assigned_driver_id?: string
   dispatcher_id?: string
   special_instructions?: string
+  cargo_type?: string
+  weight?: number
+  distance?: number
   created_at: string
   updated_at: string
   customer?: Customer
@@ -227,4 +233,8 @@ export interface Document {
   mime_type?: string
   uploaded_by?: string
   created_at: string
+  // Related data from joins
+  load?: { load_number: string } | null
+  invoice?: { invoice_number: string } | null
+  quote?: { quote_number: string } | null
 }

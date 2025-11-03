@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Calculator, ArrowLeft, Edit, FileDown } from "lucide-react"
+import { Calculator, ArrowLeft, Edit, FileDown, XCircle, Send } from "lucide-react"
 import Link from "next/link"
 import { QuoteActions } from "@/components/quotes/quote-actions"
 

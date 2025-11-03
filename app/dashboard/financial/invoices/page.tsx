@@ -221,7 +221,7 @@ export default async function InvoicesPage() {
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-4">
                 <div>
                   <p className="text-xs text-muted-foreground">Invoice Date</p>
-                  <p className="text-sm font-medium">{new Date(invoice.invoice_date).toLocaleDateString()}</p>
+                  <p className="text-sm font-medium">{new Date(invoice.issue_date).toLocaleDateString()}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Due Date</p>
@@ -235,7 +235,7 @@ export default async function InvoicesPage() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Payment Terms</p>
-                  <p className="text-sm font-medium">{invoice.payment_terms} days</p>
+                  <p className="text-sm font-medium">{invoice.customer?.payment_terms || "N/A"} days</p>
                 </div>
               </div>
 

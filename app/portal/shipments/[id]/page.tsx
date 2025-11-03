@@ -141,9 +141,9 @@ export default function ShipmentDetailPage({ params }: ShipmentDetailPageProps) 
                       <div>
                         <p>{shipment.pickup_address}</p>
                         <p>
-                          {shipment.pickup_city}, {shipment.pickup_state}
+                          {shipment.pickup_city}{shipment.pickup_state ? `, ${shipment.pickup_state}` : ''}
                         </p>
-                        <p className="text-sm">Date: {new Date(shipment.pickup_date).toLocaleDateString()}</p>
+                        <p className="text-sm">Date: {shipment.pickup_date ? new Date(shipment.pickup_date).toLocaleDateString() : 'N/A'}</p>
                       </div>
                     </div>
                   </div>
@@ -154,9 +154,9 @@ export default function ShipmentDetailPage({ params }: ShipmentDetailPageProps) 
                       <div>
                         <p>{shipment.delivery_address}</p>
                         <p>
-                          {shipment.delivery_city}, {shipment.delivery_state}
+                          {shipment.delivery_city}{shipment.delivery_state ? `, ${shipment.delivery_state}` : ''}
                         </p>
-                        <p className="text-sm">Date: {new Date(shipment.delivery_date).toLocaleDateString()}</p>
+                        <p className="text-sm">Date: {shipment.delivery_date ? new Date(shipment.delivery_date).toLocaleDateString() : 'N/A'}</p>
                       </div>
                     </div>
                   </div>
@@ -173,15 +173,15 @@ export default function ShipmentDetailPage({ params }: ShipmentDetailPageProps) 
                 <div className="grid gap-4 md:grid-cols-3">
                   <div>
                     <h4 className="font-medium text-slate-900 mb-1">Cargo Type</h4>
-                    <p className="text-slate-600">{shipment.cargo_type}</p>
+                    <p className="text-slate-600">{shipment.cargo_type || shipment.description || 'N/A'}</p>
                   </div>
                   <div>
                     <h4 className="font-medium text-slate-900 mb-1">Weight</h4>
-                    <p className="text-slate-600">{shipment.weight} kg</p>
+                    <p className="text-slate-600">{shipment.weight || shipment.weight_kg || 0} kg</p>
                   </div>
                   <div>
                     <h4 className="font-medium text-slate-900 mb-1">Distance</h4>
-                    <p className="text-slate-600">{shipment.distance} km</p>
+                    <p className="text-slate-600">{shipment.distance ? `${shipment.distance} km` : 'N/A'}</p>
                   </div>
                 </div>
                 {shipment.special_instructions && (
@@ -249,7 +249,7 @@ export default function ShipmentDetailPage({ params }: ShipmentDetailPageProps) 
                 <div className="space-y-3">
                   <div className="flex justify-between">
                     <span className="text-slate-600">Base Rate:</span>
-                    <span className="font-medium">${shipment.rate.toFixed(2)}</span>
+                    <span className="font-medium">${(shipment.rate ?? 0).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-600">Currency:</span>
@@ -259,7 +259,7 @@ export default function ShipmentDetailPage({ params }: ShipmentDetailPageProps) 
                     <div className="flex justify-between">
                       <span className="font-semibold text-slate-900">Total:</span>
                       <span className="font-bold text-lg">
-                        ${shipment.rate.toFixed(2)} {shipment.currency}
+                        ${(shipment.rate ?? 0).toFixed(2)} {shipment.currency}
                       </span>
                     </div>
                   </div>

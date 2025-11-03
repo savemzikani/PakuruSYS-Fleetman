@@ -657,7 +657,8 @@ export async function unassignDriverFromLoad(loadId: string) {
     revalidatePath(`/drivers/${load.assigned_driver_id}`)
     revalidatePath(`/loads/${loadId}`)
     
-    const driverName = load.driver ? `${load.driver.first_name} ${load.driver.last_name}` : 'Driver'
+    const driver = Array.isArray(load.driver) ? load.driver[0] : load.driver
+    const driverName = driver ? `${driver.first_name} ${driver.last_name}` : 'Driver'
     
     return { 
       success: true, 

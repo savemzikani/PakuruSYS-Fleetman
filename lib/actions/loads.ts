@@ -17,7 +17,7 @@ export async function createLoad(formData: FormData) {
     // Get user profile
     const { data: profile } = await supabase
       .from('profiles')
-      .select('company_id, role')
+      .select('id, company_id, role')
       .eq('id', user.id)
       .single()
 
@@ -110,7 +110,7 @@ export async function updateLoad(loadId: string, formData: FormData) {
     // Get user profile
     const { data: profile } = await supabase
       .from('profiles')
-      .select('company_id, role')
+      .select('id, company_id, role')
       .eq('id', user.id)
       .single()
 
@@ -215,7 +215,7 @@ export async function updateLoadStatus(loadId: string, status: LoadStatus) {
     // Get user profile
     const { data: profile } = await supabase
       .from('profiles')
-      .select('company_id, role')
+      .select('id, company_id, role')
       .eq('id', user.id)
       .single()
 
@@ -254,7 +254,8 @@ export async function updateLoadStatus(loadId: string, status: LoadStatus) {
       'cancelled': ['pending'] // Can reactivate cancelled loads
     }
 
-    if (!validTransitions[currentLoad.status].includes(status)) {
+    const currentStatus = currentLoad.status as LoadStatus
+    if (!validTransitions[currentStatus]?.includes(status)) {
       throw new Error(`Cannot change status from ${currentLoad.status} to ${status}`)
     }
 
@@ -332,7 +333,7 @@ export async function assignVehicleToLoad(loadId: string, vehicleId: string) {
     // Get user profile
     const { data: profile } = await supabase
       .from('profiles')
-      .select('company_id, role')
+      .select('id, company_id, role')
       .eq('id', user.id)
       .single()
 
@@ -425,7 +426,7 @@ export async function deleteLoad(loadId: string) {
     // Get user profile
     const { data: profile } = await supabase
       .from('profiles')
-      .select('company_id, role')
+      .select('id, company_id, role')
       .eq('id', user.id)
       .single()
 
@@ -497,7 +498,7 @@ export async function getLoads(filters?: {
     // Get user profile
     const { data: profile } = await supabase
       .from('profiles')
-      .select('company_id, role')
+      .select('id, company_id, role')
       .eq('id', user.id)
       .single()
 
@@ -565,7 +566,7 @@ export async function getLoad(loadId: string) {
     // Get user profile
     const { data: profile } = await supabase
       .from('profiles')
-      .select('company_id, role')
+      .select('id, company_id, role')
       .eq('id', user.id)
       .single()
 
@@ -622,7 +623,7 @@ export async function addLoadTracking(loadId: string, formData: FormData) {
     // Get user profile
     const { data: profile } = await supabase
       .from('profiles')
-      .select('company_id, role')
+      .select('id, company_id, role')
       .eq('id', user.id)
       .single()
 

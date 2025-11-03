@@ -45,13 +45,19 @@ export function useUser() {
           .from("profiles")
           .select("*")
           .eq("id", authUser.id)
-          .single()
+          .maybeSingle()
 
         console.log("[v0] Profile result:", { profile: !!profile, error: profileError })
 
         if (profileError) {
           console.error("[v0] Profile error:", profileError)
           throw profileError
+        }
+
+        if (!profile) {
+          console.log("[v0] No profile found for user, setting null user")
+          setUser(null)
+          return
         }
 
         if (profile.company_id) {
@@ -63,7 +69,7 @@ export function useUser() {
               company:companies(*)
             `)
             .eq("id", authUser.id)
-            .single()
+            .maybeSingle()
 
           console.log("[v0] Company result:", { profile: !!profileWithCompany, error: companyError })
 

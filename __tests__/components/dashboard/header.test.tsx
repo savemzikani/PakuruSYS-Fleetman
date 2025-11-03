@@ -55,4 +55,4 @@ describe('Header Component', () => {
     const header = screen.getByRole('banner')
     expect(header).toBeInTheDocument()
   })
-}
+})

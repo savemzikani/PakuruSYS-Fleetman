@@ -85,7 +85,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     const pdfBuffer = await renderToBuffer(<QuotePDF data={data} />)
 
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(pdfBuffer as unknown as BodyInit, {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="quote-${quote.quote_number}.pdf"`,

@@ -182,9 +182,9 @@ export default async function DocumentsPage() {
                   <div>
                     <h3 className="text-lg font-semibold">{doc.file_name}</h3>
                     <p className="text-muted-foreground">
-                      {doc.load?.load_number && `Load: ${doc.load.load_number}`}
-                      {doc.invoice?.invoice_number && `Invoice: ${doc.invoice.invoice_number}`}
-                      {doc.quote?.quote_number && `Quote: ${doc.quote.quote_number}`}
+                      {doc.load?.load_number && `Load: ${doc.load.load_number} `}
+                      {doc.invoice?.invoice_number && `Invoice: ${doc.invoice.invoice_number} `}
+                      {doc.quote?.quote_number && `Quote: ${doc.quote.quote_number} `}
                     </p>
                   </div>
                 </div>

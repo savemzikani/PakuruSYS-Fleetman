@@ -406,7 +406,9 @@ export async function acceptQuote(quoteId: string) {
       .single()
 
     const isStaff = profile && ['super_admin','company_admin','manager','dispatcher'].includes(profile.role)
-    if (!isStaff && existing.customer?.email && existing.customer.email !== user.email) {
+    const customer = existing.customer as { email?: string } | { email?: string }[] | null | undefined
+    const customerEmail = Array.isArray(customer) ? customer[0]?.email : customer?.email
+    if (!isStaff && customerEmail && customerEmail !== user.email) {
       throw new Error('Not authorized to accept this quote')
     }
 
@@ -477,7 +479,9 @@ export async function rejectQuote(quoteId: string) {
       .single()
 
     const isStaff = profile && ['super_admin','company_admin','manager','dispatcher'].includes(profile.role)
-    if (!isStaff && existing.customer?.email && existing.customer.email !== user.email) {
+    const customer = existing.customer as { email?: string } | { email?: string }[] | null | undefined
+    const customerEmail = Array.isArray(customer) ? customer[0]?.email : customer?.email
+    if (!isStaff && customerEmail && customerEmail !== user.email) {
       throw new Error('Not authorized to reject this quote')
     }
 

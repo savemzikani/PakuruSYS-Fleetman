@@ -194,7 +194,7 @@ export default async function LoadsPage() {
                 <div className="flex items-center gap-4">
                   <Badge className={getStatusColor(load.status)}>{load.status.replace("_", " ")}</Badge>
                   <div className="text-right">
-                    <p className="text-sm font-medium">{formatCurrency(load.rate, load.currency)}</p>
+                    <p className="text-sm font-medium">{formatCurrency(load.rate ?? 0, load.currency)}</p>
                     <p className="text-xs text-muted-foreground">{load.currency}</p>
                   </div>
                 </div>
