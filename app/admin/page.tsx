@@ -1,57 +1,4 @@
-import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Clock, Building2, Users, Activity } from "lucide-react"
-
-export default async function AdminDashboard() {
-  const supabase = await createClient()
-
-  // Get authenticated user
-  const {
-    data: { user: authUser },
-    error: authError,
-  } = await supabase.auth.getUser()
-
-  if (authError || !authUser) {
-    redirect("/auth/login")
-  }
-
-  // Get user profile
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", authUser.id)
-    .single()
-
-  if (!profile || profile.role !== "super_admin") {
-    redirect("/dashboard")
-  }
-
-  // Fetch real data for Super Admin dashboard
-  const [
-    { data: pendingApplications, count: pendingCount },
-    { data: companies, count: companiesCount },
-    { data: users, count: usersCount },
-    { data: recentApplications },
-  ] = await Promise.all([
-    supabase
-      .from("fleet_applications")
-      .select("*", { count: "exact" })
-      .eq("status", "pending"),
-    supabase
-      .from("companies")
-      .select("*", { count: "exact" })
-      .eq("status", "active"),
-    supabase
-      .from("profiles")
-      .select("*", { count: "exact" }),
-    supabase
-      .from("fleet_applications")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(3),
-  ])
+export default function AdminDashboard() {
   return (
     <div className="space-y-6">
       <div>
@@ -66,8 +13,8 @@ export default async function AdminDashboard() {
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{pendingCount || 0}</div>
-            <p className="text-xs text-muted-foreground">{pendingCount ? `${pendingCount} awaiting review` : 'No pending applications'}</p>
+            <div className="text-2xl font-bold">12</div>
+            <p className="text-xs text-muted-foreground">+3 from last week</p>
           </CardContent>
         </Card>
 
@@ -77,8 +24,8 @@ export default async function AdminDashboard() {
             <Building2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{companiesCount || 0}</div>
-            <p className="text-xs text-muted-foreground">{companiesCount ? `${companiesCount} active companies` : 'No companies yet'}</p>
+            <div className="text-2xl font-bold">45</div>
+            <p className="text-xs text-muted-foreground">+2 this month</p>
           </CardContent>
         </Card>
 
@@ -88,8 +35,8 @@ export default async function AdminDashboard() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{usersCount || 0}</div>
-            <p className="text-xs text-muted-foreground">{usersCount ? `${usersCount} total users` : 'No users yet'}</p>
+            <div className="text-2xl font-bold">1,234</div>
+            <p className="text-xs text-muted-foreground">+18% from last month</p>
           </CardContent>
         </Card>
 
@@ -113,21 +60,21 @@ export default async function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {recentApplications && recentApplications.length > 0 ? (
-                recentApplications.map((app) => (
-                  <div key={app.id} className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">{app.company_name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {app.country} • {new Date(app.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <Badge variant={app.status === "pending" ? "secondary" : "outline"}>{app.status}</Badge>
+              {[
+                { company: "Trans Africa Logistics", country: "South Africa", date: "2 hours ago", status: "pending" },
+                { company: "Desert Express", country: "Namibia", date: "1 day ago", status: "pending" },
+                { company: "Kalahari Transport", country: "Botswana", date: "2 days ago", status: "review" },
+              ].map((app, i) => (
+                <div key={i} className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">{app.company}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {app.country} • {app.date}
+                    </p>
                   </div>
-                ))
-              ) : (
-                <p className="text-sm text-muted-foreground">No recent applications</p>
-              )}
+                  <Badge variant={app.status === "pending" ? "secondary" : "outline"}>{app.status}</Badge>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
@@ -139,20 +86,20 @@ export default async function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {companies && companies.length > 0 ? (
-                companies.slice(0, 3).map((company) => (
-                  <div key={company.id} className="flex items-start space-x-3">
-                    <div className="w-2 h-2 bg-cyan-500 rounded-full mt-2" />
-                    <div>
-                      <p className="font-medium">Company: {company.name}</p>
-                      <p className="text-sm text-muted-foreground">{company.country}</p>
-                      <p className="text-xs text-muted-foreground">Created: {new Date(company.created_at).toLocaleDateString()}</p>
-                    </div>
+              {[
+                { event: "Company approved", details: "SADC Transport Solutions", time: "1 hour ago" },
+                { event: "New user registered", details: "john@crossborder.com", time: "3 hours ago" },
+                { event: "System backup completed", details: "All data backed up", time: "6 hours ago" },
+              ].map((activity, i) => (
+                <div key={i} className="flex items-start space-x-3">
+                  <div className="w-2 h-2 bg-cyan-500 rounded-full mt-2" />
+                  <div>
+                    <p className="font-medium">{activity.event}</p>
+                    <p className="text-sm text-muted-foreground">{activity.details}</p>
+                    <p className="text-xs text-muted-foreground">{activity.time}</p>
                   </div>
-                ))
-              ) : (
-                <p className="text-sm text-muted-foreground">No company activity</p>
-              )}
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
@@ -160,3 +107,7 @@ export default async function AdminDashboard() {
     </div>
   )
 }
+
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Clock, Building2, Users, Activity } from "lucide-react"

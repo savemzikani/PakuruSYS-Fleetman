@@ -1,11 +1,10 @@
 // Database types for the SADC Logistics System
-export type UserRole = "super_admin" | "company_admin" | "manager" | "dispatcher" | "driver" | "customer"
+export type UserRole = "super_admin" | "company_admin" | "manager" | "dispatcher" | "driver"
 export type CompanyStatus = "active" | "inactive" | "suspended"
 export type VehicleStatus = "active" | "maintenance" | "out_of_service" | "retired"
 export type LoadStatus = "pending" | "assigned" | "in_transit" | "delivered" | "cancelled"
 export type PaymentStatus = "pending" | "paid" | "overdue" | "cancelled"
-export type QuoteStatus = "draft" | "sent" | "accepted" | "rejected" | "expired" | "converted"
-export type DocumentType = "invoice" | "pod" | "customs" | "permit" | "insurance" | "quote" | "other"
+export type DocumentType = "invoice" | "pod" | "customs" | "permit" | "insurance" | "other"
 export type CurrencyCode =
   | "USD"
   | "ZAR"
@@ -43,7 +42,6 @@ export interface Company {
 export interface Profile {
   id: string
   company_id?: string
-  customer_id?: string
   first_name: string
   last_name: string
   email: string
@@ -124,12 +122,10 @@ export interface Load {
   volume_m3?: number
   pickup_address: string
   pickup_city?: string
-  pickup_state?: string
   pickup_country?: string
   pickup_date?: string
   delivery_address: string
   delivery_city?: string
-  delivery_state?: string
   delivery_country?: string
   delivery_date?: string
   status: LoadStatus
@@ -139,9 +135,6 @@ export interface Load {
   assigned_driver_id?: string
   dispatcher_id?: string
   special_instructions?: string
-  cargo_type?: string
-  weight?: number
-  distance?: number
   created_at: string
   updated_at: string
   customer?: Customer
@@ -182,50 +175,11 @@ export interface Invoice {
   load?: Load
 }
 
-export interface Quote {
-  id: string
-  company_id: string
-  customer_id: string
-  load_id?: string
-  quote_number: string
-  quote_date: string
-  valid_until: string
-  subtotal: number
-  tax_amount: number
-  total_amount: number
-  currency: CurrencyCode
-  status: QuoteStatus
-  converted_to_invoice_id?: string
-  notes?: string
-  terms?: string
-  created_by?: string
-  sent_at?: string
-  accepted_at?: string
-  rejected_at?: string
-  created_at: string
-  updated_at: string
-  customer?: Customer
-  load?: Load
-  quote_items?: QuoteItem[]
-}
-
-export interface QuoteItem {
-  id: string
-  quote_id: string
-  description: string
-  quantity: number
-  unit_price: number
-  line_total: number
-  sort_order: number
-  created_at: string
-}
-
 export interface Document {
   id: string
   company_id: string
   load_id?: string
   invoice_id?: string
-  quote_id?: string
   document_type: DocumentType
   file_name: string
   file_path: string
@@ -233,8 +187,4 @@ export interface Document {
   mime_type?: string
   uploaded_by?: string
   created_at: string
-  // Related data from joins
-  load?: { load_number: string } | null
-  invoice?: { invoice_number: string } | null
-  quote?: { quote_number: string } | null
 }

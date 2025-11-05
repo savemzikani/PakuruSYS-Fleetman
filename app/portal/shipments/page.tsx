@@ -56,8 +56,8 @@ export default function CustomerShipmentsPage() {
       filtered = filtered.filter(
         (shipment) =>
           shipment.load_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (shipment.pickup_city?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
-          (shipment.delivery_city?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false),
+          shipment.pickup_city.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          shipment.delivery_city.toLowerCase().includes(searchTerm.toLowerCase()),
       )
     }
 
@@ -173,7 +173,7 @@ export default function CustomerShipmentsPage() {
                           {shipment.status.replace("_", " ").toUpperCase()}
                         </Badge>
                         <p className="text-lg font-semibold text-slate-900 mt-1">
-                          ${(shipment.rate ?? 0).toFixed(2)} {shipment.currency}
+                          ${shipment.rate.toFixed(2)} {shipment.currency}
                         </p>
                       </div>
                       <Link href={`/portal/shipments/${shipment.id}`}>

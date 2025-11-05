@@ -4,13 +4,11 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { createClient } from "@/lib/supabase/client"
-import { LayoutDashboard, FileText, Building2, Users, Settings, BarChart3, Shield, LogOut, Receipt } from "lucide-react"
+import { LayoutDashboard, FileText, Building2, Users, Settings, BarChart3, Shield, LogOut } from "lucide-react"
 
 const navigation = [
   { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
   { name: "Applications", href: "/admin/applications", icon: FileText },
-  { name: "Quotes", href: "/admin/quotes", icon: Receipt },
   { name: "Companies", href: "/admin/companies", icon: Building2 },
   { name: "Users", href: "/admin/users", icon: Users },
   { name: "Analytics", href: "/admin/analytics", icon: BarChart3 },
@@ -45,15 +43,7 @@ export function Sidebar() {
       </nav>
 
       <div className="p-4 border-t border-gray-200">
-        <Button 
-          variant="ghost" 
-          className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
-          onClick={async () => {
-            const supabase = createClient()
-            await supabase.auth.signOut()
-            window.location.href = "/auth/login"
-          }}
-        >
+        <Button variant="ghost" className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50">
           <LogOut className="h-4 w-4 mr-3" />
           Sign Out
         </Button>

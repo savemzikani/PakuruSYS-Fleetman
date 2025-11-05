@@ -33,25 +33,16 @@ export default function CustomerPortalPage() {
 
   useEffect(() => {
     const fetchDashboardData = async () => {
-      if (!user?.email) return
+      if (!user?.customer_id) return
 
       const supabase = createClient()
 
       try {
-        // Find customer by email
-        const { data: customer } = await supabase
-          .from("customers")
-          .select("id")
-          .eq("email", user.email)
-          .single()
-
-        if (!customer) return
-
         // Fetch loads for this customer
         const { data: loads } = await supabase
           .from("loads")
           .select("*")
-          .eq("customer_id", customer.id)
+          .eq("customer_id", user.customer_id)
           .order("created_at", { ascending: false })
           .limit(5)
 
@@ -59,7 +50,7 @@ export default function CustomerPortalPage() {
         const { data: invoices } = await supabase
           .from("invoices")
           .select("*")
-          .eq("customer_id", customer.id)
+          .eq("customer_id", user.customer_id)
           .order("created_at", { ascending: false })
           .limit(5)
 
@@ -102,7 +93,7 @@ export default function CustomerPortalPage() {
     return <div className="flex items-center justify-center h-64">Loading...</div>
   }
 
-  if (!user) {
+  if (!user || user.role !== "customer") {
     router.push("/auth/login")
     return null
   }

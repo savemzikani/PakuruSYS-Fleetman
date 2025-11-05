@@ -36,21 +36,6 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // If user is authenticated but not yet approved, gate access to app
-  if (user && !request.nextUrl.pathname.startsWith("/auth")) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("is_active")
-      .eq("id", user.id)
-      .single()
-
-    if (profile && profile.is_active === false) {
-      const url = request.nextUrl.clone()
-      url.pathname = "/auth/pending-approval"
-      return NextResponse.redirect(url)
-    }
-  }
-
   // Redirect authenticated users away from auth pages
   if (user && (request.nextUrl.pathname.startsWith("/auth") || request.nextUrl.pathname === "/")) {
     const url = request.nextUrl.clone()

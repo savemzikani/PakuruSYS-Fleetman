@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
     const pdfBuffer = await renderToBuffer(<ReportPDF data={reportData} />)
 
     // Return PDF response
-    return new NextResponse(pdfBuffer as unknown as BodyInit, {
+    return new NextResponse(pdfBuffer, {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="${reportType}-report-${period}.pdf"`,

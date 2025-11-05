@@ -1,14 +1,13 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
-import type { LucideReact } from "lucide-react"
-import type { ComponentType } from "react"
+import type { LucideIcon } from "lucide-react"
 
 interface MetricCardProps {
   title: string
   value: string | number
   change?: string
   changeType?: "positive" | "negative" | "neutral"
-  icon: ComponentType<{ className?: string }>
+  icon: LucideIcon
   className?: string
 }
 
