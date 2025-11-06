@@ -1,15 +1,27 @@
-import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Package, Plus, Search, MapPin, Clock, Truck } from "lucide-react"
 import Link from "next/link"
+import { redirect } from "next/navigation"
+import { Clock, MapPin, Package, Plus, Truck } from "lucide-react"
+
+import { LoadAssignButton, LoadEditButton } from "@/components/loads/load-modal-buttons"
+import { LoadFilters } from "@/components/loads/load-filters"
+import { LoadStatusToastListener } from "@/components/loads/load-status-toast-listener"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { createClient } from "@/lib/supabase/server"
 import type { Load } from "@/lib/types/database"
 
-export default async function LoadsPage() {
+type LoadsPageSearchParams = {
+  q?: string | string[]
+  status?: string | string[]
+  customer?: string | string[]
+}
+
+export default async function LoadsPage({
+  searchParams,
+}: {
+  searchParams?: LoadsPageSearchParams
+}) {
   const supabase = await createClient()
 
   // Get authenticated user
@@ -38,23 +50,62 @@ export default async function LoadsPage() {
     redirect("/dashboard")
   }
 
-  // Fetch loads with related data
-  const { data: loads } = await supabase
-    .from("loads")
-    .select(`
+  const extractParam = (value?: string | string[]) =>
+    Array.isArray(value) ? value[0] : value ?? ""
+
+  const searchTermRaw = extractParam(searchParams?.q).trim()
+  const statusFilterRaw = extractParam(searchParams?.status).trim() || "all"
+  const customerFilterRaw = extractParam(searchParams?.customer).trim() || "all"
+
+  const sanitizeLike = (term: string) => term.replace(/[%_]/g, (match) => `\\${match}`)
+
+  const loadSelect = `
       *,
-      customer:customers(name),
+      customer:customers(id, name),
       vehicle:vehicles(registration_number),
       driver:drivers(first_name, last_name)
-    `)
+    `
+
+  let loadsQuery = supabase
+    .from("loads")
+    .select(loadSelect)
     .eq("company_id", profile.company_id)
     .order("created_at", { ascending: false })
 
+  if (statusFilterRaw && statusFilterRaw !== "all") {
+    loadsQuery = loadsQuery.eq("status", statusFilterRaw)
+  }
+
+  if (customerFilterRaw && customerFilterRaw !== "all") {
+    loadsQuery = loadsQuery.eq("customer_id", customerFilterRaw)
+  }
+
+  if (searchTermRaw) {
+    const pattern = `%${sanitizeLike(searchTermRaw)}%`
+    loadsQuery = loadsQuery.or(
+      `load_number.ilike.${pattern},pickup_city.ilike.${pattern},delivery_city.ilike.${pattern}`,
+    )
+  }
+
+  const [{ data: loads }, { data: customers }] = await Promise.all([
+    loadsQuery,
+    supabase
+      .from("customers")
+      .select("id, name")
+      .eq("company_id", profile.company_id)
+      .order("name", { ascending: true }),
+  ])
+
+  const loadList = (loads ?? []) as Load[]
+  const customerList = (customers ?? []) as { id: string; name: string | null }[]
+
   // Calculate load statistics
-  const totalLoads = loads?.length || 0
-  const pendingLoads = loads?.filter((l) => l.status === "pending").length || 0
-  const inTransitLoads = loads?.filter((l) => l.status === "in_transit").length || 0
-  const deliveredLoads = loads?.filter((l) => l.status === "delivered").length || 0
+  const totalLoads = loadList.length
+  const pendingLoads = loadList.filter((loadItem) => loadItem.status === "pending").length
+  const inTransitLoads = loadList.filter((loadItem) => loadItem.status === "in_transit").length
+  const deliveredLoads = loadList.filter((loadItem) => loadItem.status === "delivered").length
+
+  const filterCustomers = customerList.map((customer) => ({ id: customer.id, name: customer.name }))
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -73,8 +124,8 @@ export default async function LoadsPage() {
     }
   }
 
-  const formatCurrency = (amount: number | null, currency: string) => {
-    if (!amount) return "N/A"
+  const formatCurrency = (amount: number | null | undefined, currency: string) => {
+    if (amount === null || amount === undefined) return "N/A"
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: currency || "USD",
@@ -83,6 +134,7 @@ export default async function LoadsPage() {
 
   return (
     <div className="space-y-6">
+      <LoadStatusToastListener companyId={profile.company_id} />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -143,42 +195,18 @@ export default async function LoadsPage() {
           <CardTitle className="text-lg">Filter Loads</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-4 flex-wrap">
-            <div className="flex-1 min-w-64">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input placeholder="Search by load number, customer, destination..." className="pl-10" />
-              </div>
-            </div>
-            <Select>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="assigned">Assigned</SelectItem>
-                <SelectItem value="in_transit">In Transit</SelectItem>
-                <SelectItem value="delivered">Delivered</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="Filter by customer" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Customers</SelectItem>
-                {/* Add customer options dynamically */}
-              </SelectContent>
-            </Select>
-          </div>
+          <LoadFilters
+            search={searchTermRaw}
+            status={statusFilterRaw}
+            customer={customerFilterRaw}
+            customers={filterCustomers}
+          />
         </CardContent>
       </Card>
 
       {/* Load List */}
       <div className="grid gap-4">
-        {loads?.map((load: Load) => (
+        {loadList.map((load) => (
           <Card key={load.id} className="hover:shadow-md transition-shadow">
             <CardContent className="p-6">
               <div className="flex items-start justify-between mb-4">
@@ -264,11 +292,9 @@ export default async function LoadsPage() {
                   </Button>
                 </Link>
                 {load.status === "pending" && (
-                  <Link href={`/loads/${load.id}/assign`}>
-                    <Button variant="outline" size="sm">
-                      Assign Vehicle
-                    </Button>
-                  </Link>
+                  <LoadAssignButton loadId={load.id} variant="outline" size="sm">
+                    Assign Vehicle
+                  </LoadAssignButton>
                 )}
                 <Link href={`/loads/${load.id}/track`}>
                   <Button variant="outline" size="sm">
@@ -276,11 +302,9 @@ export default async function LoadsPage() {
                     Track
                   </Button>
                 </Link>
-                <Link href={`/loads/${load.id}/edit`}>
-                  <Button variant="outline" size="sm">
-                    Edit
-                  </Button>
-                </Link>
+                <LoadEditButton loadId={load.id} variant="outline" size="sm">
+                  Edit
+                </LoadEditButton>
               </div>
             </CardContent>
           </Card>

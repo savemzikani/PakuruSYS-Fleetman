@@ -6,17 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
-import { useState } from "react"
-
 export default function AddDriverPage() {
-  const [formData, setFormData] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    licenseNumber: "",
-  })
-
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">

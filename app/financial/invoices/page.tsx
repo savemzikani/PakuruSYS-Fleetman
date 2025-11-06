@@ -1,17 +1,52 @@
-"use client"
-
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { FileText, Plus, Search, Download, Send } from "lucide-react"
+import { FileText, Plus, Download } from "lucide-react"
+
 import Link from "next/link"
 import type { Invoice } from "@/lib/types/database"
+import { InvoiceFilters, type InvoiceFilterCustomer } from "@/components/financial/invoice-filters"
+import { InvoiceActions } from "@/components/financial/invoice-actions"
 
-export default async function InvoicesPage() {
+type InvoicesPageSearchParams = {
+  q?: string | string[]
+  status?: string | string[]
+  customer?: string | string[]
+}
+
+const extractParam = (value?: string | string[]) => (Array.isArray(value) ? value[0] : value ?? "")
+
+const sanitizeSearchTerm = (value: string) => value.replace(/[%_*]/g, "").replace(/,+/g, " ").trim()
+
+const buildIlikePattern = (value: string) => {
+  const sanitized = sanitizeSearchTerm(value)
+  return sanitized ? `*${sanitized}*` : ""
+}
+
+const isInvoiceOverdue = (invoice: Invoice) => {
+  if (invoice.status === "paid" || invoice.status === "cancelled") {
+    return false
+  }
+
+  if (invoice.status === "overdue") {
+    return true
+  }
+
+  if (!invoice.due_date) {
+    return false
+  }
+
+  const dueDate = new Date(invoice.due_date)
+  return dueDate < new Date()
+}
+
+export default async function InvoicesPage({
+  searchParams,
+}: {
+  searchParams?: InvoicesPageSearchParams
+}) {
   const supabase = await createClient()
 
   // Get authenticated user
@@ -40,8 +75,15 @@ export default async function InvoicesPage() {
     redirect("/dashboard")
   }
 
-  // Fetch invoices with related data
-  const { data: invoices } = await supabase
+  const searchTermRaw = extractParam(searchParams?.q)
+  const statusFilterRaw = extractParam(searchParams?.status).trim() || "all"
+  const customerFilterRaw = extractParam(searchParams?.customer).trim() || "all"
+  const sanitizedSearchTerm = sanitizeSearchTerm(searchTermRaw)
+  const ilikePattern = buildIlikePattern(searchTermRaw)
+
+  const nowIso = new Date().toISOString()
+
+  let invoiceQuery = supabase
     .from("invoices")
     .select(`
       *,
@@ -49,24 +91,81 @@ export default async function InvoicesPage() {
       load:loads(load_number)
     `)
     .eq("company_id", profile.company_id)
-    .order("created_at", { ascending: false })
+
+  if (statusFilterRaw !== "all") {
+    if (statusFilterRaw === "overdue") {
+      invoiceQuery = invoiceQuery.or(
+        `status.eq.overdue,and(status.neq.paid,status.neq.cancelled,due_date.not.is.null,due_date.lt.${nowIso})`,
+      )
+    } else {
+      invoiceQuery = invoiceQuery.eq("status", statusFilterRaw)
+    }
+  }
+
+  if (customerFilterRaw !== "all") {
+    invoiceQuery = invoiceQuery.eq("customer_id", customerFilterRaw)
+  }
+
+  if (ilikePattern) {
+    invoiceQuery = invoiceQuery.or(`invoice_number.ilike.${ilikePattern},notes.ilike.${ilikePattern}`)
+  }
+
+  // Fetch invoices with related data
+  const [{ data: invoices }, { data: customers }] = await Promise.all([
+    invoiceQuery.order("created_at", { ascending: false }),
+    supabase
+      .from("customers")
+      .select("id, name")
+      .eq("company_id", profile.company_id)
+      .order("name", { ascending: true }),
+  ])
+
+  type InvoiceWithRelations = Invoice & {
+    customer?: { name?: string | null }
+    load?: { load_number?: string | null }
+  }
+
+  const invoiceList = (invoices ?? []) as InvoiceWithRelations[]
+  const customerList = (customers ?? []) as { id: string; name: string | null }[]
+  const filterCustomers: InvoiceFilterCustomer[] = customerList.map((customer) => ({
+    id: customer.id,
+    name: customer.name,
+  }))
+
+  const normalizedSearch = sanitizedSearchTerm.toLowerCase()
+
+  const filteredInvoices = invoiceList.filter((invoice) => {
+    if (!normalizedSearch) {
+      return true
+    }
+
+    const tokens = [
+      invoice.invoice_number,
+      invoice.customer?.name ?? "",
+      invoice.load?.load_number ?? "",
+      invoice.notes ?? "",
+    ]
+
+    const matchesSearch = tokens.some((token) => token?.toLowerCase().includes(normalizedSearch))
+
+    return matchesSearch
+  })
 
   // Calculate invoice statistics
-  const totalInvoices = invoices?.length || 0
-  const paidInvoices = invoices?.filter((inv) => inv.status === "paid").length || 0
-  const pendingInvoices = invoices?.filter((inv) => inv.status === "pending").length || 0
-  const overdueInvoices =
-    invoices?.filter((inv) => {
-      if (inv.status !== "pending") return false
-      const dueDate = new Date(inv.due_date)
-      return dueDate < new Date()
-    }).length || 0
+  const totalInvoices = invoiceList.length
+  const paidInvoices = invoiceList.filter((inv) => inv.status === "paid").length
+  const pendingInvoices = invoiceList.filter((inv) => inv.status === "pending").length
+  const overdueInvoices = invoiceList.filter((inv) => isInvoiceOverdue(inv))
 
-  const totalAmount = invoices?.reduce((sum, inv) => sum + (inv.total_amount || 0), 0) || 0
-  const paidAmount =
-    invoices?.filter((inv) => inv.status === "paid").reduce((sum, inv) => sum + (inv.total_amount || 0), 0) || 0
-  const pendingAmount =
-    invoices?.filter((inv) => inv.status === "pending").reduce((sum, inv) => sum + (inv.total_amount || 0), 0) || 0
+  const totalAmount = invoiceList.reduce((sum, inv) => sum + (inv.total_amount || 0), 0)
+  const paidAmount = invoiceList
+    .filter((inv) => inv.status === "paid")
+    .reduce((sum, inv) => sum + (inv.total_amount || 0), 0)
+  const pendingAmount = invoiceList
+    .filter((inv) => inv.status === "pending")
+    .reduce((sum, inv) => sum + (inv.total_amount || 0), 0)
+  const overdueAmount = overdueInvoices.reduce((sum, inv) => sum + (inv.total_amount || 0), 0)
+  const overdueCount = overdueInvoices.length
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -88,12 +187,6 @@ export default async function InvoicesPage() {
       default:
         return "bg-gray-100 text-gray-800"
     }
-  }
-
-  const isOverdue = (invoice: Invoice) => {
-    if (invoice.status !== "pending") return false
-    const dueDate = new Date(invoice.due_date)
-    return dueDate < new Date()
   }
 
   return (
@@ -150,8 +243,8 @@ export default async function InvoicesPage() {
             <div className="h-2 w-2 bg-red-500 rounded-full"></div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{overdueInvoices}</div>
-            <p className="text-xs text-muted-foreground">Requires attention</p>
+            <div className="text-2xl font-bold text-red-600">{overdueCount}</div>
+            <p className="text-xs text-muted-foreground">{formatCurrency(overdueAmount)} overdue</p>
           </CardContent>
         </Card>
       </div>
@@ -162,136 +255,112 @@ export default async function InvoicesPage() {
           <CardTitle className="text-lg">Filter Invoices</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-4 flex-wrap">
-            <div className="flex-1 min-w-64">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input placeholder="Search by invoice number, customer..." className="pl-10" />
-              </div>
-            </div>
-            <Select>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="paid">Paid</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="overdue">Overdue</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="Filter by customer" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Customers</SelectItem>
-                {/* Add customer options dynamically */}
-              </SelectContent>
-            </Select>
-          </div>
+          <InvoiceFilters
+            search={searchTermRaw}
+            status={statusFilterRaw}
+            customer={customerFilterRaw}
+            customers={filterCustomers}
+          />
         </CardContent>
       </Card>
 
       {/* Invoice List */}
       <div className="grid gap-4">
-        {invoices?.map((invoice: Invoice) => (
-          <Card key={invoice.id} className="hover:shadow-md transition-shadow">
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-                    <FileText className="h-6 w-6 text-primary" />
+        {filteredInvoices.length > 0 ? (
+          filteredInvoices.map((invoice) => {
+            const overdue = isInvoiceOverdue(invoice)
+            const customerName = invoice.customer?.name ?? "Unknown customer"
+
+            return (
+              <Card key={invoice.id} className="hover:shadow-md transition-shadow">
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                        <FileText className="h-6 w-6 text-primary" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold">{invoice.invoice_number}</h3>
+                        <p className="text-muted-foreground">{customerName}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <Badge className={getStatusColor(overdue ? "overdue" : invoice.status)}>
+                        {overdue ? "Overdue" : invoice.status}
+                      </Badge>
+                      <div className="text-right">
+                        <p className="text-lg font-bold">{formatCurrency(invoice.total_amount)}</p>
+                        <p className="text-xs text-muted-foreground">{invoice.currency}</p>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-lg font-semibold">{invoice.invoice_number}</h3>
-                    <p className="text-muted-foreground">{invoice.customer?.name}</p>
+
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-4">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Invoice Date</p>
+                      <p className="text-sm font-medium">
+                        {invoice.invoice_date ? new Date(invoice.invoice_date).toLocaleDateString() : "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Due Date</p>
+                      <p className={`text-sm font-medium ${overdue ? "text-red-600" : ""}`}>
+                        {invoice.due_date ? new Date(invoice.due_date).toLocaleDateString() : "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Load Number</p>
+                      <p className="text-sm font-medium">{invoice.load?.load_number || "N/A"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Payment Terms</p>
+                      <p className="text-sm font-medium">
+                        {typeof invoice.payment_terms === "number" ? `${invoice.payment_terms} days` : "—"}
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <Badge className={getStatusColor(isOverdue(invoice) ? "overdue" : invoice.status)}>
-                    {isOverdue(invoice) ? "Overdue" : invoice.status}
-                  </Badge>
-                  <div className="text-right">
-                    <p className="text-lg font-bold">{formatCurrency(invoice.total_amount)}</p>
-                    <p className="text-xs text-muted-foreground">{invoice.currency}</p>
+
+                  <div className="grid gap-4 md:grid-cols-3 mb-4 text-xs">
+                    <div>
+                      <span className="text-muted-foreground">Subtotal:</span>{" "}
+                      <span className="font-medium">{formatCurrency(invoice.subtotal ?? 0)}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Tax:</span>{" "}
+                      <span className="font-medium">{formatCurrency(invoice.tax_amount ?? 0)}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Total:</span>{" "}
+                      <span className="font-medium">{formatCurrency(invoice.total_amount ?? 0)}</span>
+                    </div>
                   </div>
-                </div>
-              </div>
 
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-4">
-                <div>
-                  <p className="text-xs text-muted-foreground">Invoice Date</p>
-                  <p className="text-sm font-medium">{new Date(invoice.invoice_date).toLocaleDateString()}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Due Date</p>
-                  <p className={`text-sm font-medium ${isOverdue(invoice) ? "text-red-600" : ""}`}>
-                    {new Date(invoice.due_date).toLocaleDateString()}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Load Number</p>
-                  <p className="text-sm font-medium">{invoice.load?.load_number || "N/A"}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Payment Terms</p>
-                  <p className="text-sm font-medium">{invoice.payment_terms} days</p>
-                </div>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-3 mb-4 text-xs">
-                <div>
-                  <span className="text-muted-foreground">Subtotal:</span>{" "}
-                  <span className="font-medium">{formatCurrency(invoice.subtotal)}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Tax:</span>{" "}
-                  <span className="font-medium">{formatCurrency(invoice.tax_amount)}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Total:</span>{" "}
-                  <span className="font-medium">{formatCurrency(invoice.total_amount)}</span>
-                </div>
-              </div>
-
-              <div className="flex gap-2">
-                <Link href={`/financial/invoices/${invoice.id}`}>
-                  <Button variant="outline" size="sm">
-                    View Details
-                  </Button>
-                </Link>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => window.open(`/api/pdf/invoice/${invoice.id}`, "_blank")}
-                >
-                  <Download className="h-4 w-4 mr-1" />
-                  Download PDF
-                </Button>
-                {invoice.status === "pending" && (
-                  <Button variant="outline" size="sm">
-                    <Send className="h-4 w-4 mr-1" />
-                    Send Reminder
-                  </Button>
-                )}
-                {invoice.status === "pending" && (
-                  <Button variant="outline" size="sm">
-                    Mark as Paid
-                  </Button>
-                )}
-                <Link href={`/financial/invoices/${invoice.id}/edit`}>
-                  <Button variant="outline" size="sm">
-                    Edit
-                  </Button>
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-
-        {(!invoices || invoices.length === 0) && (
+                  <div className="flex flex-wrap gap-2">
+                    <Link href={`/financial/invoices/${invoice.id}`}>
+                      <Button variant="outline" size="sm">
+                        View Details
+                      </Button>
+                    </Link>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open(`/api/pdf/invoice/${invoice.id}`, "_blank")}
+                    >
+                      <Download className="h-4 w-4 mr-1" />
+                      Download PDF
+                    </Button>
+                    <InvoiceActions invoiceId={invoice.id} status={invoice.status} isOverdue={overdue} />
+                    <Link href={`/financial/invoices/${invoice.id}/edit`}>
+                      <Button variant="outline" size="sm">
+                        Edit
+                      </Button>
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })
+        ) : (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
               <FileText className="h-12 w-12 text-muted-foreground mb-4" />

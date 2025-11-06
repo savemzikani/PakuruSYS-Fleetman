@@ -1,7 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { Menu, Search, LogOut } from "lucide-react"
+import { Menu, Search, LogOut, Bell, User } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import type { Profile } from "@/lib/types/database"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
@@ -33,12 +33,19 @@ export function Header({ user, onMenuClick }: HeaderProps) {
   }
 
   const userInitials = `${user.first_name?.[0] || ""}${user.last_name?.[0] || ""}`.toUpperCase()
+  const avatarUrl = (user as Profile & { avatar_url?: string | null }).avatar_url ?? undefined
 
   return (
     <>
       <header className="flex h-16 items-center justify-between border-b border-border bg-background px-6">
         <div className="flex items-center gap-4 flex-1">
-          <Button variant="ghost" size="sm" className="md:hidden" onClick={onMenuClick}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-full border"
+            onClick={onMenuClick}
+            aria-label="Toggle sidebar"
+          >
             <Menu className="h-5 w-5" />
           </Button>
           <button
@@ -69,18 +76,35 @@ export function Header({ user, onMenuClick }: HeaderProps) {
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="flex items-center gap-3">
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="text-xs font-semibold bg-primary text-primary-foreground">
-                    {userInitials}
-                  </AvatarFallback>
+              <Button variant="ghost" size="icon" className="rounded-full border">
+                <Bell className="h-5 w-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <div className="px-2 py-1.5 text-sm font-medium">
+                {user.first_name} {user.last_name}
+              </div>
+              <div className="px-2 py-1 text-xs text-muted-foreground capitalize">{user.role.replace("_", " ")}</div>
+              <DropdownMenuSeparator className="my-2" />
+              <DropdownMenuItem onClick={() => router.push("/settings")}>Settings</DropdownMenuItem>
+              <DropdownMenuSeparator className="my-2" />
+              <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
+                <LogOut className="h-4 w-4 mr-2" />
+                Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="rounded-full border" aria-label="Open profile menu">
+                <Avatar>
+                  {avatarUrl ? (
+                    <AvatarImage src={avatarUrl} alt={user.first_name || "User"} />
+                  ) : (
+                    <AvatarFallback>{userInitials || <User className="h-4 w-4" />}</AvatarFallback>
+                  )}
                 </Avatar>
-                <div className="hidden sm:block text-right">
-                  <p className="text-sm font-medium leading-none">
-                    {user.first_name} {user.last_name}
-                  </p>
-                  <p className="text-xs text-muted-foreground capitalize mt-1">{user.role.replace("_", " ")}</p>
-                </div>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
@@ -100,7 +124,7 @@ export function Header({ user, onMenuClick }: HeaderProps) {
         </div>
       </header>
 
-      <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
+      <GlobalSearch onOpen={searchOpen} onOpenChange={setSearchOpen} />
     </>
   )
 }

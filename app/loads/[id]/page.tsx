@@ -1,10 +1,13 @@
 import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Edit, MapPin, Package, Truck, User, Calendar, DollarSign } from "lucide-react"
 import Link from "next/link"
+import { ArrowLeft, Calendar, DollarSign, Edit, MapPin, Package, Truck, User } from "lucide-react"
+
+import { createClient } from "@/lib/supabase/server"
+import { LoadAssignButton, LoadEditButton } from "@/components/loads/load-modal-buttons"
+import type { LoadTracking } from "@/lib/types/database"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 interface LoadDetailPageProps {
   params: Promise<{ id: string }>
@@ -111,12 +114,10 @@ export default async function LoadDetailPage({ params }: LoadDetailPageProps) {
         </div>
         <div className="flex items-center gap-2">
           <Badge className={getStatusColor(load.status)}>{load.status.replace("_", " ")}</Badge>
-          <Link href={`/loads/${load.id}/edit`}>
-            <Button>
-              <Edit className="h-4 w-4 mr-2" />
-              Edit Load
-            </Button>
-          </Link>
+          <LoadEditButton loadId={load.id}>
+            <Edit className="h-4 w-4 mr-2" />
+            Edit Load
+          </LoadEditButton>
         </div>
       </div>
 
@@ -287,7 +288,7 @@ export default async function LoadDetailPage({ params }: LoadDetailPageProps) {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {trackingHistory.map((tracking, index) => (
+              {trackingHistory.map((tracking: LoadTracking, index: number) => (
                 <div key={tracking.id} className="flex gap-4">
                   <div className="flex flex-col items-center">
                     <div className={`w-3 h-3 rounded-full ${index === 0 ? "bg-primary" : "bg-muted-foreground/30"}`} />
@@ -325,16 +326,14 @@ export default async function LoadDetailPage({ params }: LoadDetailPageProps) {
       {/* Quick Actions */}
       <div className="grid gap-4 md:grid-cols-3">
         {load.status === "pending" && (
-          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+          <Card className="hover:shadow-md transition-shadow">
             <CardContent className="p-6 text-center">
               <Truck className="h-8 w-8 text-primary mx-auto mb-3" />
               <h3 className="font-semibold mb-2">Assign Vehicle</h3>
               <p className="text-sm text-muted-foreground mb-4">Assign a vehicle and driver to this load</p>
-              <Link href={`/loads/${load.id}/assign`}>
-                <Button variant="outline" size="sm">
-                  Assign Now
-                </Button>
-              </Link>
+              <LoadAssignButton loadId={load.id} variant="outline" size="sm">
+                Assign Now
+              </LoadAssignButton>
             </CardContent>
           </Card>
         )}

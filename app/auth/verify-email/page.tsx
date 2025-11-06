@@ -11,7 +11,7 @@ export default function VerifyEmailPage() {
               <Mail className="w-6 h-6 text-blue-600" />
             </div>
             <CardTitle className="text-2xl font-bold text-gray-900">Check Your Email</CardTitle>
-            <CardDescription className="text-gray-600">We've sent you a verification link</CardDescription>
+            <CardDescription className="text-gray-600">We&apos;ve sent you a verification link</CardDescription>
           </CardHeader>
           <CardContent className="text-center">
             <p className="text-sm text-gray-600 mb-4">
@@ -19,7 +19,7 @@ export default function VerifyEmailPage() {
               your spam folder.
             </p>
             <p className="text-xs text-gray-500">
-              Once verified, you'll be able to access the SADC Logistics Management System.
+              Once verified, you&apos;ll be able to access the SADC Logistics Management System.
             </p>
           </CardContent>
         </Card>

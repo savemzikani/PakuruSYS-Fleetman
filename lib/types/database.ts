@@ -1,5 +1,5 @@
 // Database types for the SADC Logistics System
-export type UserRole = "super_admin" | "company_admin" | "manager" | "dispatcher" | "driver"
+export type UserRole = "super_admin" | "company_admin" | "manager" | "dispatcher" | "driver" | "customer"
 export type CompanyStatus = "active" | "inactive" | "suspended"
 export type VehicleStatus = "active" | "maintenance" | "out_of_service" | "retired"
 export type LoadStatus = "pending" | "assigned" | "in_transit" | "delivered" | "cancelled"
@@ -42,6 +42,7 @@ export interface Company {
 export interface Profile {
   id: string
   company_id?: string
+  customer_id?: string
   first_name: string
   last_name: string
   email: string
@@ -118,18 +119,23 @@ export interface Load {
   customer_id: string
   load_number: string
   description?: string
+  cargo_type?: string
+  weight?: number
   weight_kg?: number
   volume_m3?: number
   pickup_address: string
   pickup_city?: string
+  pickup_state?: string
   pickup_country?: string
   pickup_date?: string
   delivery_address: string
   delivery_city?: string
+  delivery_state?: string
   delivery_country?: string
   delivery_date?: string
   status: LoadStatus
   rate?: number
+  distance?: number
   currency: CurrencyCode
   assigned_vehicle_id?: string
   assigned_driver_id?: string
@@ -160,6 +166,7 @@ export interface Invoice {
   customer_id: string
   load_id?: string
   invoice_number: string
+  invoice_date?: string
   issue_date: string
   due_date: string
   subtotal: number
@@ -169,6 +176,7 @@ export interface Invoice {
   status: PaymentStatus
   paid_date?: string
   notes?: string
+  payment_terms?: number
   created_at: string
   updated_at: string
   customer?: Customer

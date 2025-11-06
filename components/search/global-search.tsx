@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Search, Loader2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
@@ -29,13 +29,16 @@ export function GlobalSearch({ onOpen = false, onOpenChange }: GlobalSearchProps
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const handleOpenChange = (newOpen: boolean) => {
-    setOpen(newOpen)
-    onOpenChange?.(newOpen)
-    if (newOpen) {
-      setTimeout(() => inputRef.current?.focus(), 0)
-    }
-  }
+  const handleOpenChange = useCallback(
+    (newOpen: boolean) => {
+      setOpen(newOpen)
+      onOpenChange?.(newOpen)
+      if (newOpen) {
+        setTimeout(() => inputRef.current?.focus(), 0)
+      }
+    },
+    [onOpenChange],
+  )
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -47,7 +50,7 @@ export function GlobalSearch({ onOpen = false, onOpenChange }: GlobalSearchProps
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [open])
+  }, [open, handleOpenChange])
 
   const handleSearch = async (searchQuery: string) => {
     setQuery(searchQuery)
@@ -61,7 +64,7 @@ export function GlobalSearch({ onOpen = false, onOpenChange }: GlobalSearchProps
     await new Promise((resolve) => setTimeout(resolve, 300))
 
     // Mock search results - replace with actual API call
-    const mockResults: SearchResult[] = [
+    const allResults: SearchResult[] = [
       {
         id: "1",
         type: "load",
@@ -83,7 +86,9 @@ export function GlobalSearch({ onOpen = false, onOpenChange }: GlobalSearchProps
         subtitle: "Active Driver",
         url: "/drivers/3",
       },
-    ].filter((result) => result.title.toLowerCase().includes(searchQuery.toLowerCase()))
+    ]
+
+    const mockResults = allResults.filter((result) => result.title.toLowerCase().includes(searchQuery.toLowerCase()))
 
     setResults(mockResults)
     setLoading(false)

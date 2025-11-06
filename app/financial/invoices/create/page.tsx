@@ -372,7 +372,7 @@ export default function CreateInvoicePage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {items.map((item, index) => (
+              {items.map((item) => (
                 <div key={item.id} className="grid gap-4 md:grid-cols-12 items-end">
                   <div className="md:col-span-5">
                     <Label htmlFor={`description-${item.id}`}>Description</Label>

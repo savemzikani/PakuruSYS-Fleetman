@@ -24,7 +24,7 @@ export default function OnboardSuccessPage() {
                 <div>
                   <h3 className="font-semibold text-blue-900">Check Your Email</h3>
                   <p className="text-blue-700 text-sm">
-                    We've sent a confirmation email with your application details and next steps.
+                    We&apos;ve sent a confirmation email with your application details and next steps.
                   </p>
                 </div>
               </div>
@@ -36,7 +36,7 @@ export default function OnboardSuccessPage() {
                 <div>
                   <h3 className="font-semibold text-yellow-900">Review Process</h3>
                   <p className="text-yellow-700 text-sm">
-                    Our team will review your application within 2-3 business days. You'll receive updates via email.
+                    Our team will review your application within 2-3 business days. You&apos;ll receive updates via email.
                   </p>
                 </div>
               </div>
@@ -46,7 +46,7 @@ export default function OnboardSuccessPage() {
               <div className="flex items-start space-x-3">
                 <ArrowRight className="w-5 h-5 text-green-600 mt-0.5" />
                 <div>
-                  <h3 className="font-semibold text-green-900">What's Next?</h3>
+                  <h3 className="font-semibold text-green-900">What&apos;s Next?</h3>
                   <ul className="text-green-700 text-sm space-y-1">
                     <li>• Application review by our team</li>
                     <li>• Account activation upon approval</li>

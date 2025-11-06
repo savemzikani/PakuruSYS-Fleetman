@@ -87,7 +87,6 @@ const monthlyTrendsData = [
 
 export default function AnalyticsPage() {
   const [selectedPeriod, setSelectedPeriod] = useState("6months")
-  const [selectedMetric, setSelectedMetric] = useState("revenue")
 
   const handleDownloadReport = async (reportType: string) => {
     try {

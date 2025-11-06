@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { DollarSign, Plus, TrendingUp, AlertTriangle, Calendar, FileText } from "lucide-react"
 import Link from "next/link"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts"
+import { FinancialCharts } from "@/components/financial/financial-charts"
 
 export default async function FinancialPage() {
   const supabase = await createClient()
@@ -37,7 +37,7 @@ export default async function FinancialPage() {
   }
 
   // Fetch financial data
-  const [{ data: invoices }, { data: expenses }, { data: loads }] = await Promise.all([
+  const [{ data: invoices }, { data: expenses }] = await Promise.all([
     supabase
       .from("invoices")
       .select(`
@@ -52,50 +52,46 @@ export default async function FinancialPage() {
       .select("*")
       .eq("company_id", profile.company_id)
       .order("created_at", { ascending: false }),
-    supabase
-      .from("loads")
-      .select("rate, currency, status, created_at")
-      .eq("company_id", profile.company_id)
-      .not("rate", "is", null),
   ])
 
   // Calculate financial metrics
-  const totalRevenue = invoices?.reduce((sum, inv) => sum + (inv.total_amount || 0), 0) || 0
-  const totalExpenses = expenses?.reduce((sum, exp) => sum + (exp.amount || 0), 0) || 0
-  const netProfit = totalRevenue - totalExpenses
-  const pendingInvoices = invoices?.filter((inv) => inv.status === "pending") || []
-  const overdueInvoices =
-    invoices?.filter((inv) => {
-      if (inv.status !== "pending") return false
-      const dueDate = new Date(inv.due_date)
-      return dueDate < new Date()
-    }) || []
+  const invoiceList = (invoices ?? []) as Invoice[]
+  const expenseList = expenses ?? []
 
-  const pendingAmount = pendingInvoices.reduce((sum, inv) => sum + (inv.total_amount || 0), 0)
-  const overdueAmount = overdueInvoices.reduce((sum, inv) => sum + (inv.total_amount || 0), 0)
+  const totalRevenue = invoiceList.reduce((sum: number, inv: Invoice) => sum + (inv.total_amount || 0), 0)
+  const totalExpenses = expenseList.reduce((sum: number, exp) => sum + (exp.amount || 0), 0)
+  const netProfit = totalRevenue - totalExpenses
+  const pendingInvoices = invoiceList.filter((inv) => inv.status === "pending")
+  const overdueInvoices = invoiceList.filter((inv) => {
+    if (inv.status !== "pending") return false
+    const dueDate = new Date(inv.due_date)
+    return dueDate < new Date()
+  })
+
+  const pendingAmount = pendingInvoices.reduce((sum: number, inv: Invoice) => sum + (inv.total_amount || 0), 0)
+  const overdueAmount = overdueInvoices.reduce((sum: number, inv: Invoice) => sum + (inv.total_amount || 0), 0)
 
   // Prepare chart data
-  const monthlyRevenue = invoices?.reduce(
-    (acc, invoice) => {
-      const month = new Date(invoice.created_at).toLocaleDateString("en-US", { month: "short", year: "2-digit" })
-      acc[month] = (acc[month] || 0) + (invoice.total_amount || 0)
-      return acc
-    },
-    {} as Record<string, number>,
-  )
+  const monthlyRevenue = invoiceList.reduce((acc: Record<string, number>, invoice: Invoice) => {
+    const month = new Date(invoice.created_at).toLocaleDateString("en-US", { month: "short", year: "2-digit" })
+    acc[month] = (acc[month] || 0) + (invoice.total_amount || 0)
+    return acc
+  }, {})
 
-  const revenueChartData = Object.entries(monthlyRevenue || {})
+  const revenueChartData = Object.entries(monthlyRevenue)
     .slice(-6)
-    .map(([month, revenue]) => ({
+    .map(([month, revenue]): { month: string; revenue: number } => ({
       month,
       revenue,
     }))
 
   const statusData = [
-    { name: "Paid", value: invoices?.filter((inv) => inv.status === "paid").length || 0, color: "#10b981" },
+    { name: "Paid", value: invoiceList.filter((inv) => inv.status === "paid").length, color: "#10b981" },
     { name: "Pending", value: pendingInvoices.length, color: "#f59e0b" },
     { name: "Overdue", value: overdueInvoices.length, color: "#ef4444" },
   ]
+
+  const chartCurrency = invoiceList[0]?.currency ?? "USD"
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -190,51 +186,7 @@ export default async function FinancialPage() {
       </div>
 
       {/* Charts */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Revenue Trend</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={revenueChartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip formatter={(value) => [formatCurrency(Number(value)), "Revenue"]} />
-                <Bar dataKey="revenue" fill="hsl(var(--primary))" />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Invoice Status Distribution</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={statusData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {statusData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
+      <FinancialCharts revenueData={revenueChartData} statusData={statusData} currency={chartCurrency} />
 
       {/* Quick Actions */}
       <div className="grid gap-4 md:grid-cols-4">

@@ -16,9 +16,35 @@ Your project is live at:
 
 **[https://vercel.com/savemzikanis-projects/v0-logistics-management-app](https://vercel.com/savemzikanis-projects/v0-logistics-management-app)**
 
-## Build your app
+## Local development setup
 
-Continue building your app on:
+1. Install dependencies:
+
+   ```bash
+   npm install
+   ```
+
+2. Create a `.env.local` file (copy from `.env.example` if available) and add:
+
+   ```bash
+   NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
+   SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+   NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=your-mapbox-public-token
+   ```
+
+   - Generate a Mapbox token at [https://account.mapbox.com/](https://account.mapbox.com/).
+   - Only expose public/PK tokens in `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN`.
+
+3. Start the dev server:
+
+   ```bash
+   npm run dev
+   ```
+
+## Continuing in v0.app
+
+You can keep iterating on the UI and re-sync with v0.app at:
 
 **[https://v0.app/chat/projects/31jTY9o9ifi](https://v0.app/chat/projects/31jTY9o9ifi)**
 

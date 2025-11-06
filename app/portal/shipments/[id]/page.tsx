@@ -9,7 +9,7 @@ import { ArrowLeft, MapPin, Calendar, Package, Truck, FileText, Clock, DollarSig
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
-import type { Load } from "@/lib/types/database"
+import type { Load, UserRole } from "@/lib/types/database"
 
 interface ShipmentDetailPageProps {
   params: {
@@ -45,6 +45,7 @@ export default function ShipmentDetailPage({ params }: ShipmentDetailPageProps) 
 
         setShipment(data)
       } catch (err) {
+        console.error(err)
         setError("Failed to load shipment details")
       } finally {
         setIsLoading(false)
@@ -58,7 +59,7 @@ export default function ShipmentDetailPage({ params }: ShipmentDetailPageProps) 
     return <div className="flex items-center justify-center h-64">Loading...</div>
   }
 
-  if (!user || user.role !== "customer") {
+  if (!user || user.role !== ("customer" as UserRole)) {
     router.push("/auth/login")
     return null
   }
@@ -141,9 +142,12 @@ export default function ShipmentDetailPage({ params }: ShipmentDetailPageProps) 
                       <div>
                         <p>{shipment.pickup_address}</p>
                         <p>
-                          {shipment.pickup_city}, {shipment.pickup_state}
+                          {shipment.pickup_city}
+                          {shipment.pickup_state ? `, ${shipment.pickup_state}` : ""}
                         </p>
-                        <p className="text-sm">Date: {new Date(shipment.pickup_date).toLocaleDateString()}</p>
+                        {shipment.pickup_date && (
+                          <p className="text-sm">Date: {new Date(shipment.pickup_date).toLocaleDateString()}</p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -154,9 +158,12 @@ export default function ShipmentDetailPage({ params }: ShipmentDetailPageProps) 
                       <div>
                         <p>{shipment.delivery_address}</p>
                         <p>
-                          {shipment.delivery_city}, {shipment.delivery_state}
+                          {shipment.delivery_city}
+                          {shipment.delivery_state ? `, ${shipment.delivery_state}` : ""}
                         </p>
-                        <p className="text-sm">Date: {new Date(shipment.delivery_date).toLocaleDateString()}</p>
+                        {shipment.delivery_date && (
+                          <p className="text-sm">Date: {new Date(shipment.delivery_date).toLocaleDateString()}</p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -247,22 +254,26 @@ export default function ShipmentDetailPage({ params }: ShipmentDetailPageProps) 
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Base Rate:</span>
-                    <span className="font-medium">${shipment.rate.toFixed(2)}</span>
-                  </div>
+                  {typeof shipment.rate === "number" && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Base Rate:</span>
+                      <span className="font-medium">${shipment.rate.toFixed(2)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-slate-600">Currency:</span>
                     <span className="font-medium">{shipment.currency}</span>
                   </div>
-                  <div className="border-t pt-3">
-                    <div className="flex justify-between">
-                      <span className="font-semibold text-slate-900">Total:</span>
-                      <span className="font-bold text-lg">
-                        ${shipment.rate.toFixed(2)} {shipment.currency}
-                      </span>
+                  {typeof shipment.rate === "number" && (
+                    <div className="border-t pt-3">
+                      <div className="flex justify-between">
+                        <span className="font-semibold text-slate-900">Total:</span>
+                        <span className="font-bold text-lg">
+                          ${shipment.rate.toFixed(2)} {shipment.currency}
+                        </span>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

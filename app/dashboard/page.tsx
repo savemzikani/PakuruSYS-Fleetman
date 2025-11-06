@@ -1,12 +1,13 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+import type { Invoice, Load } from "@/lib/types/database"
 import { MetricCard } from "@/components/dashboard/metric-card"
 import { RecentActivity } from "@/components/dashboard/recent-activity"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Package, Truck, Users, DollarSign, TrendingUp, AlertTriangle, Building2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
+import { DashboardRevenueChart } from "@/components/dashboard/revenue-chart"
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -55,6 +56,14 @@ export default async function DashboardPage() {
           .limit(5),
       ])
 
+    type PendingApplication = {
+      id: string
+      company_name: string
+      company?: { registration_number?: string | null } | null
+    }
+
+    const pendingApplicationList = (pendingApplications ?? []) as PendingApplication[]
+
     return (
       <div className="space-y-6">
         <div>
@@ -68,13 +77,13 @@ export default async function DashboardPage() {
           <MetricCard title="All Drivers" value={totalDrivers || 0} icon={Users} />
           <MetricCard
             title="Pending Applications"
-            value={pendingApplications?.length || 0}
-            changeType={pendingApplications && pendingApplications.length > 0 ? "warning" : "positive"}
+            value={pendingApplicationList.length}
+            changeType={pendingApplicationList.length > 0 ? "negative" : "positive"}
             icon={AlertTriangle}
           />
         </div>
 
-        {pendingApplications && pendingApplications.length > 0 && (
+        {pendingApplicationList.length > 0 && (
           <Card className="border-yellow-200 bg-yellow-50 dark:bg-yellow-950 dark:border-yellow-900">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -84,7 +93,7 @@ export default async function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {pendingApplications.map((app) => (
+                {pendingApplicationList.map((app) => (
                   <div
                     key={app.id}
                     className="flex items-center justify-between p-3 border border-yellow-200 rounded-lg dark:border-yellow-900"
@@ -119,12 +128,27 @@ export default async function DashboardPage() {
 
   const companyId = profile.company_id
 
+  const monthsBack = 6
+  const now = new Date()
+  const startDate = new Date(now.getFullYear(), now.getMonth() - (monthsBack - 1), 1)
+  startDate.setHours(0, 0, 0, 0)
+  const startDateIso = startDate.toISOString()
+
+  const monthBuckets = Array.from({ length: monthsBack }, (_, index) => {
+    const date = new Date(startDate.getFullYear(), startDate.getMonth() + index, 1)
+    return {
+      key: `${date.getFullYear()}-${date.getMonth()}`,
+      label: date.toLocaleDateString("en-US", { month: "short" }),
+    }
+  })
+
   const [
     { count: totalLoads },
     { count: activeVehicles },
     { count: totalDrivers },
     { data: recentLoads },
-    { data: monthlyRevenue },
+    { data: monthlyInvoices },
+    { data: monthlyLoadRecords },
   ] = await Promise.all([
     supabase.from("loads").select("*", { count: "exact", head: true }).eq("company_id", companyId),
     supabase
@@ -148,30 +172,85 @@ export default async function DashboardPage() {
       .from("invoices")
       .select("total_amount, created_at")
       .eq("company_id", companyId)
-      .gte("created_at", new Date(Date.now() - 6 * 30 * 24 * 60 * 60 * 1000).toISOString()),
+      .gte("created_at", startDateIso),
+    supabase
+      .from("loads")
+      .select("id, created_at")
+      .eq("company_id", companyId)
+      .gte("created_at", startDateIso),
   ])
 
-  // Process monthly revenue data for chart
-  const revenueByMonth = monthlyRevenue?.reduce(
-    (acc, invoice) => {
-      const month = new Date(invoice.created_at).toLocaleDateString("en-US", { month: "short" })
-      acc[month] = (acc[month] || 0) + Number(invoice.total_amount)
-      return acc
-    },
-    {} as Record<string, number>,
-  )
+  type RecentLoadRow = Pick<Load, "id" | "load_number" | "pickup_city" | "delivery_city" | "created_at" | "status"> & {
+    customer?: { name?: string | null } | null
+  }
 
-  const chartData = Object.entries(revenueByMonth || {}).map(([month, revenue]) => ({
-    month,
-    revenue,
+  const recentLoadList = (recentLoads ?? []) as RecentLoadRow[]
+  const invoiceRecords = (monthlyInvoices ?? []) as Array<Pick<Invoice, "total_amount" | "created_at">>
+  const loadTrendRecordsList = (monthlyLoadRecords ?? []) as Array<Pick<Load, "id" | "created_at">>
+
+  const loadCountsByMonth = loadTrendRecordsList.reduce<Record<string, number>>((acc, load) => {
+    const createdAt = load.created_at
+    if (!createdAt) {
+      return acc
+    }
+    const date = new Date(createdAt)
+    const key = `${date.getFullYear()}-${date.getMonth()}`
+    acc[key] = (acc[key] ?? 0) + 1
+    return acc
+  }, {})
+
+  const revenueTotalsByMonth = invoiceRecords.reduce<Record<string, number>>((acc, invoice) => {
+    const date = new Date(invoice.created_at)
+    const key = `${date.getFullYear()}-${date.getMonth()}`
+    const amount = Number(invoice.total_amount ?? 0)
+    acc[key] = (acc[key] ?? 0) + amount
+    return acc
+  }, {})
+
+  const loadTrend = monthBuckets.map(({ key, label }) => ({
+    month: label,
+    count: loadCountsByMonth[key] ?? 0,
   }))
 
+  const revenueTrend = monthBuckets.map(({ key, label }) => ({
+    month: label,
+    revenue: revenueTotalsByMonth[key] ?? 0,
+  }))
+
+  const lastTwoMonths = loadTrend.slice(-2)
+  const [previousLoadMonth, currentLoadMonth] =
+    lastTwoMonths.length === 2 ? lastTwoMonths : [undefined, lastTwoMonths[0]]
+  const loadChange =
+    previousLoadMonth && currentLoadMonth ? currentLoadMonth.count - previousLoadMonth.count : 0
+  const loadChangePercent =
+    previousLoadMonth && currentLoadMonth && previousLoadMonth.count > 0
+      ? (loadChange / previousLoadMonth.count) * 100
+      : null
+
+  const revenueChangePercent = (() => {
+    if (revenueTrend.length < 2) {
+      return null
+    }
+    const previous = revenueTrend[revenueTrend.length - 2]
+    const current = revenueTrend[revenueTrend.length - 1]
+    if (!previous || previous.revenue === 0) {
+      return null
+    }
+    return ((current.revenue - previous.revenue) / previous.revenue) * 100
+  })()
+
+  const driverChange = 0 // placeholder until driver trend data is available
+  const chartData = revenueTrend
+  const totalRevenueForPeriod = chartData.reduce((sum, point) => sum + point.revenue, 0)
+
   // Recent activity data
-  const recentActivity = recentLoads?.map((load) => ({
+  const recentActivity = recentLoadList.map((load) => ({
     id: load.id,
     type: "load" as const,
     title: `Load ${load.load_number}`,
-    description: `${load.customer?.name} - ${load.pickup_city} to ${load.delivery_city}`,
+    description: `${load.customer?.name ?? "Customer"} - ${load.pickup_city ?? "Origin"} to ${
+      load.delivery_city ?? "Destination"
+    }`,
     timestamp: load.created_at,
     status: load.status,
   }))
@@ -181,7 +260,7 @@ export default async function DashboardPage() {
       {/* Welcome Header */}
       <div>
         <h1 className="text-3xl font-bold text-foreground">Welcome back, {profile.first_name}</h1>
-        <p className="text-muted-foreground">Here's what's happening with your logistics operations today.</p>
+        <p className="text-muted-foreground">Here&apos;s what&apos;s happening with your logistics operations today.</p>
       </div>
 
       {/* Metrics Grid */}
@@ -189,8 +268,12 @@ export default async function DashboardPage() {
         <MetricCard
           title="Total Loads"
           value={totalLoads || 0}
-          change="+12% from last month"
-          changeType="positive"
+          change={
+            loadChangePercent === null
+              ? "No prior month"
+              : `${loadChangePercent >= 0 ? "+" : ""}${loadChangePercent.toFixed(1)}% vs last month`
+          }
+          changeType={loadChangePercent === null ? "neutral" : loadChangePercent >= 0 ? "positive" : "negative"}
           icon={Package}
         />
         <MetricCard
@@ -200,12 +283,24 @@ export default async function DashboardPage() {
           changeType="neutral"
           icon={Truck}
         />
-        <MetricCard title="Drivers" value={totalDrivers || 0} change="All active" changeType="positive" icon={Users} />
+        <MetricCard
+          title="Drivers"
+          value={totalDrivers || 0}
+          change={driverChange === 0 ? "No change" : `${driverChange > 0 ? "+" : ""}${driverChange} vs last month`}
+          changeType={driverChange === 0 ? "neutral" : driverChange > 0 ? "positive" : "negative"}
+          icon={Users}
+        />
         <MetricCard
           title="Monthly Revenue"
           value={`$${chartData.reduce((sum, item) => sum + item.revenue, 0).toLocaleString()}`}
-          change="+8% from last month"
-          changeType="positive"
+          change={
+            revenueChangePercent === null
+              ? "No prior month"
+              : `${revenueChangePercent >= 0 ? "+" : ""}${revenueChangePercent.toFixed(1)}% vs last month`
+          }
+          changeType={
+            revenueChangePercent === null ? "neutral" : revenueChangePercent >= 0 ? "positive" : "negative"
+          }
           icon={DollarSign}
         />
       </div>
@@ -221,21 +316,7 @@ export default async function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {chartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip formatter={(value) => [`$${Number(value).toLocaleString()}`, "Revenue"]} />
-                  <Bar dataKey="revenue" fill="hsl(var(--primary))" />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-300 text-muted-foreground">
-                No revenue data available
-              </div>
-            )}
+            <DashboardRevenueChart data={chartData} />
           </CardContent>
         </Card>
 

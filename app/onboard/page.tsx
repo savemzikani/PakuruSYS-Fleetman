@@ -438,7 +438,7 @@ export default function OnboardPage() {
             <div className="bg-yellow-50 p-4 rounded-lg">
               <h3 className="font-semibold text-yellow-900 mb-2">Next Steps</h3>
               <p>
-                After submission, your application will be reviewed by our team. You'll receive an email confirmation
+                After submission, your application will be reviewed by our team. You&apos;ll receive an email confirmation
                 and updates on your application status.
               </p>
             </div>
