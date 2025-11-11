@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { CheckCircle2, Mail, Loader2 } from "lucide-react"
 
@@ -15,6 +16,7 @@ interface InvoiceActionsProps {
 }
 
 export function InvoiceActions({ invoiceId, status, isOverdue }: InvoiceActionsProps) {
+  const router = useRouter()
   const [pendingAction, setPendingAction] = useState<"mark" | "reminder" | null>(null)
   const [isPending, startTransition] = useTransition()
 
@@ -33,6 +35,7 @@ export function InvoiceActions({ invoiceId, status, isOverdue }: InvoiceActionsP
         .then((result) => {
           if (result.success) {
             toast.success("Invoice marked as paid.")
+            router.refresh()
           } else {
             toast.error(result.error ?? "Failed to update invoice.")
           }
@@ -59,6 +62,7 @@ export function InvoiceActions({ invoiceId, status, isOverdue }: InvoiceActionsP
           if (result.success) {
             const context = isOverdue ? "overdue" : "pending"
             toast.success(`Reminder sent for ${context} invoice.`)
+            router.refresh()
           } else {
             toast.error(result.error ?? "Failed to send reminder.")
           }

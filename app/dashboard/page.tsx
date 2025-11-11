@@ -292,7 +292,7 @@ export default async function DashboardPage() {
         />
         <MetricCard
           title="Monthly Revenue"
-          value={`$${chartData.reduce((sum, item) => sum + item.revenue, 0).toLocaleString()}`}
+          value={`$${totalRevenueForPeriod.toLocaleString()}`}
           change={
             revenueChangePercent === null
               ? "No prior month"

@@ -3,9 +3,10 @@ import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { DollarSign, Plus, TrendingUp, AlertTriangle, Calendar, FileText } from "lucide-react"
+import { DollarSign, Plus, TrendingUp, AlertTriangle, Calendar, FileText, ClipboardList, Clock, AlertCircle } from "lucide-react"
 import Link from "next/link"
 import { FinancialCharts } from "@/components/financial/financial-charts"
+import type { Invoice, Quote } from "@/lib/types/database"
 
 export default async function FinancialPage() {
   const supabase = await createClient()
@@ -37,7 +38,7 @@ export default async function FinancialPage() {
   }
 
   // Fetch financial data
-  const [{ data: invoices }, { data: expenses }] = await Promise.all([
+  const [{ data: invoices }, { data: expenses }, { data: quotes }] = await Promise.all([
     supabase
       .from("invoices")
       .select(`
@@ -52,11 +53,19 @@ export default async function FinancialPage() {
       .select("*")
       .eq("company_id", profile.company_id)
       .order("created_at", { ascending: false }),
+    supabase
+      .from("quotes")
+      .select("*, customer:customers(name)")
+      .eq("company_id", profile.company_id)
+      .order("created_at", { ascending: false }),
   ])
 
   // Calculate financial metrics
   const invoiceList = (invoices ?? []) as Invoice[]
-  const expenseList = expenses ?? []
+  const expenseList = (expenses ?? []) as { amount?: number | null }[]
+  const quoteList = (quotes ?? []) as (Quote & {
+    customer?: { name: string | null }
+  })[]
 
   const totalRevenue = invoiceList.reduce((sum: number, inv: Invoice) => sum + (inv.total_amount || 0), 0)
   const totalExpenses = expenseList.reduce((sum: number, exp) => sum + (exp.amount || 0), 0)
@@ -70,6 +79,44 @@ export default async function FinancialPage() {
 
   const pendingAmount = pendingInvoices.reduce((sum: number, inv: Invoice) => sum + (inv.total_amount || 0), 0)
   const overdueAmount = overdueInvoices.reduce((sum: number, inv: Invoice) => sum + (inv.total_amount || 0), 0)
+
+  const openQuoteStatuses: Quote["status"][] = ["draft", "sent", "approved", "accepted"]
+  const openQuotes = quoteList.filter((quote) => openQuoteStatuses.includes(quote.status))
+  const openQuoteValue = openQuotes.reduce((sum, quote) => sum + (quote.total_amount ?? 0), 0)
+
+  const quoteStatusOrder: Quote["status"][] = ["draft", "sent", "approved", "accepted", "rejected", "expired", "converted"]
+  const quoteStatusColors: Record<Quote["status"], string> = {
+    draft: "#94a3b8",
+    sent: "#3b82f6",
+    approved: "#10b981",
+    accepted: "#22c55e",
+    rejected: "#ef4444",
+    expired: "#f97316",
+    converted: "#a855f7",
+  }
+
+  const now = new Date()
+  const upcomingThreshold = new Date(now)
+  upcomingThreshold.setDate(now.getDate() + 7)
+
+  const expiringQuotes = quoteList.filter((quote) => {
+    if (!quote.valid_until) return false
+    const validUntil = new Date(quote.valid_until)
+    return (
+      validUntil >= now &&
+      validUntil <= upcomingThreshold &&
+      openQuoteStatuses.includes(quote.status)
+    )
+  })
+
+  const overdueQuotes = quoteList.filter((quote) => {
+    const validUntil = quote.valid_until ? new Date(quote.valid_until) : null
+    const isPastDue = validUntil ? validUntil < now : false
+    return (
+      quote.status === "expired" ||
+      (isPastDue && !["converted", "rejected"].includes(quote.status))
+    )
+  })
 
   // Prepare chart data
   const monthlyRevenue = invoiceList.reduce((acc: Record<string, number>, invoice: Invoice) => {
@@ -85,18 +132,26 @@ export default async function FinancialPage() {
       revenue,
     }))
 
-  const statusData = [
+  const invoiceStatusData = [
     { name: "Paid", value: invoiceList.filter((inv) => inv.status === "paid").length, color: "#10b981" },
     { name: "Pending", value: pendingInvoices.length, color: "#f59e0b" },
     { name: "Overdue", value: overdueInvoices.length, color: "#ef4444" },
   ]
 
+  const quoteStatusData = quoteStatusOrder
+    .map((status) => ({
+      name: status.charAt(0).toUpperCase() + status.slice(1),
+      value: quoteList.filter((quote) => quote.status === status).length,
+      color: quoteStatusColors[status],
+    }))
+    .filter((item) => item.value > 0)
+
   const chartCurrency = invoiceList[0]?.currency ?? "USD"
 
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = (amount: number, currency = chartCurrency) => {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
-      currency: "USD",
+      currency,
     }).format(amount)
   }
 
@@ -110,6 +165,27 @@ export default async function FinancialPage() {
         return "bg-red-100 text-red-800"
       case "cancelled":
         return "bg-gray-100 text-gray-800"
+      default:
+        return "bg-gray-100 text-gray-800"
+    }
+  }
+
+  const getQuoteStatusColor = (status: Quote["status"]) => {
+    switch (status) {
+      case "draft":
+        return "bg-slate-100 text-slate-700"
+      case "sent":
+        return "bg-blue-100 text-blue-800"
+      case "approved":
+        return "bg-emerald-100 text-emerald-700"
+      case "accepted":
+        return "bg-green-100 text-green-800"
+      case "rejected":
+        return "bg-red-100 text-red-700"
+      case "expired":
+        return "bg-orange-100 text-orange-800"
+      case "converted":
+        return "bg-purple-100 text-purple-800"
       default:
         return "bg-gray-100 text-gray-800"
     }
@@ -140,7 +216,7 @@ export default async function FinancialPage() {
       </div>
 
       {/* Financial Overview */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
@@ -181,12 +257,30 @@ export default async function FinancialPage() {
           <CardContent>
             <div className="text-2xl font-bold text-yellow-600">{formatCurrency(pendingAmount)}</div>
             <p className="text-xs text-muted-foreground">{pendingInvoices.length} pending invoices</p>
+            {overdueAmount > 0 ? (
+              <p className="text-xs text-muted-foreground">{formatCurrency(overdueAmount)} overdue</p>
+            ) : null}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Open Quotes</CardTitle>
+            <ClipboardList className="h-4 w-4 text-purple-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-purple-600">{formatCurrency(openQuoteValue)}</div>
+            <p className="text-xs text-muted-foreground">{openQuotes.length} active quotes</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Charts */}
-      <FinancialCharts revenueData={revenueChartData} statusData={statusData} currency={chartCurrency} />
+      <FinancialCharts
+        revenueData={revenueChartData}
+        invoiceStatusData={invoiceStatusData}
+        quoteStatusData={quoteStatusData}
+        currency={chartCurrency}
+      />
 
       {/* Quick Actions */}
       <div className="grid gap-4 md:grid-cols-4">
@@ -241,7 +335,7 @@ export default async function FinancialPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {invoices?.slice(0, 5).map((invoice) => (
+            {invoiceList.slice(0, 5).map((invoice) => (
               <div key={invoice.id} className="flex items-center justify-between p-4 border rounded-lg">
                 <div className="flex items-center gap-4">
                   <FileText className="h-8 w-8 text-primary" />
@@ -265,39 +359,131 @@ export default async function FinancialPage() {
         </CardContent>
       </Card>
 
+      {/* Recent Quotes */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Recent Quotes</CardTitle>
+          <Link href="/financial/quotes">
+            <Button variant="outline" size="sm">
+              View All
+            </Button>
+          </Link>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {quoteList.length > 0 ? (
+              quoteList.slice(0, 5).map((quote) => (
+                <div key={quote.id} className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex items-center gap-4">
+                    <ClipboardList className="h-8 w-8 text-purple-600" />
+                    <div>
+                      <p className="font-medium">{quote.quote_number}</p>
+                      <p className="text-sm text-muted-foreground">{quote.customer?.name ?? "Unknown customer"}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <Badge className={getQuoteStatusColor(quote.status)}>{quote.status}</Badge>
+                    <div className="text-right">
+                      <p className="text-sm font-medium">{formatCurrency(quote.total_amount ?? 0)}</p>
+                      {quote.valid_until ? (
+                        <p className="text-xs text-muted-foreground">
+                          Expires: {new Date(quote.valid_until).toLocaleDateString()}
+                        </p>
+                      ) : null}
+                    </div>
+                    <Link href={`/financial/quotes/${quote.id}`}>
+                      <Button variant="ghost" size="sm">
+                        View
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground">No quotes on record yet.</p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Overdue Alerts */}
-      {overdueInvoices.length > 0 && (
+      {overdueInvoices.length > 0 || expiringQuotes.length > 0 || overdueQuotes.length > 0 ? (
         <Card className="border-red-200 bg-red-50">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-red-800">
-              <AlertTriangle className="h-5 w-5" />
-              Overdue Invoices Alert
+              <AlertTriangle className="h-5 w-5" /> Attention Needed
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-red-800 mb-4">
-              You have {overdueInvoices.length} overdue invoices totaling {formatCurrency(overdueAmount)}
-            </p>
-            <div className="space-y-2">
-              {overdueInvoices.slice(0, 3).map((invoice) => (
-                <div key={invoice.id} className="flex justify-between items-center">
-                  <span className="text-sm">
-                    {invoice.invoice_number} - {invoice.customer?.name}
-                  </span>
-                  <span className="text-sm font-medium">{formatCurrency(invoice.total_amount)}</span>
-                </div>
-              ))}
-            </div>
-            <div className="mt-4">
-              <Link href="/financial/invoices?status=overdue">
-                <Button variant="outline" size="sm">
-                  View All Overdue
-                </Button>
-              </Link>
-            </div>
+          <CardContent className="space-y-5">
+            {overdueInvoices.length > 0 ? (
+              <div className="space-y-3">
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-red-800">
+                  <FileText className="h-4 w-4" /> Overdue Invoices
+                </h3>
+                {overdueInvoices.slice(0, 5).map((invoice) => (
+                  <div key={invoice.id} className="flex items-center justify-between rounded-md border border-red-100 bg-white p-3">
+                    <div>
+                      <p className="font-medium text-red-800">{invoice.invoice_number}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {invoice.customer?.name} • Due {new Date(invoice.due_date).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-semibold text-red-800">{formatCurrency(invoice.total_amount)}</p>
+                      <p className="text-xs text-muted-foreground">{invoice.status}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {expiringQuotes.length > 0 ? (
+              <div className="space-y-3">
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-blue-800">
+                  <Clock className="h-4 w-4" /> Quotes Expiring Soon
+                </h3>
+                {expiringQuotes.slice(0, 5).map((quote) => (
+                  <div key={quote.id} className="flex items-center justify-between rounded-md border border-blue-100 bg-white p-3">
+                    <div>
+                      <p className="font-medium text-blue-900">{quote.quote_number}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {quote.customer?.name ?? "Unknown customer"} • Expires {quote.valid_until ? new Date(quote.valid_until).toLocaleDateString() : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Badge className={getQuoteStatusColor(quote.status)}>{quote.status}</Badge>
+                      <p className="text-sm font-semibold text-blue-900">{formatCurrency(quote.total_amount ?? 0)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {overdueQuotes.length > 0 ? (
+              <div className="space-y-3">
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-orange-800">
+                  <AlertCircle className="h-4 w-4" /> Quotes Past Validity
+                </h3>
+                {overdueQuotes.slice(0, 5).map((quote) => (
+                  <div key={quote.id} className="flex items-center justify-between rounded-md border border-orange-100 bg-white p-3">
+                    <div>
+                      <p className="font-medium text-orange-900">{quote.quote_number}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {quote.customer?.name ?? "Unknown customer"}
+                        {quote.valid_until ? ` • Was valid until ${new Date(quote.valid_until).toLocaleDateString()}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Badge className={getQuoteStatusColor(quote.status)}>{quote.status}</Badge>
+                      <p className="text-sm font-semibold text-orange-900">{formatCurrency(quote.total_amount ?? 0)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </CardContent>
         </Card>
-      )}
+      ) : null}
     </div>
   )
 }

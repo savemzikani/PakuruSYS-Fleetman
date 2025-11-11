@@ -4,6 +4,14 @@ export type CompanyStatus = "active" | "inactive" | "suspended"
 export type VehicleStatus = "active" | "maintenance" | "out_of_service" | "retired"
 export type LoadStatus = "pending" | "assigned" | "in_transit" | "delivered" | "cancelled"
 export type PaymentStatus = "pending" | "paid" | "overdue" | "cancelled"
+export type QuoteStatus =
+  | "draft"
+  | "sent"
+  | "approved"
+  | "accepted"
+  | "rejected"
+  | "expired"
+  | "converted"
 export type DocumentType = "invoice" | "pod" | "customs" | "permit" | "insurance" | "other"
 export type CurrencyCode =
   | "USD"
@@ -111,6 +119,12 @@ export interface Customer {
   is_active: boolean
   created_at: string
   updated_at: string
+  default_payment_terms?: number | null
+  default_currency?: CurrencyCode | null
+  default_tax_rate?: number | null
+  auto_email_invoices: boolean
+  requires_po_number: boolean
+  invoice_delivery_email?: string | null
 }
 
 export interface Load {
@@ -146,6 +160,8 @@ export interface Load {
   customer?: Customer
   vehicle?: Vehicle
   driver?: Driver
+  quote_id?: string | null
+  origin_metadata?: Record<string, unknown> | null
 }
 
 export interface LoadTracking {
@@ -181,6 +197,44 @@ export interface Invoice {
   updated_at: string
   customer?: Customer
   load?: Load
+  quote_id?: string | null
+  source_load_id?: string | null
+  origin_metadata?: Record<string, unknown> | null
+}
+
+export interface Quote {
+  id: string
+  company_id: string
+  customer_id: string
+  dispatcher_id?: string | null
+  quote_number: string
+  status: QuoteStatus
+  valid_from?: string | null
+  valid_until?: string | null
+  currency: CurrencyCode
+  subtotal: number
+  tax_rate: number
+  tax_amount: number
+  total_amount: number
+  notes?: string | null
+  converted_load_id?: string | null
+  created_at: string
+  updated_at: string
+  customer?: Customer
+  dispatcher?: Profile
+  items?: QuoteItem[]
+}
+
+export interface QuoteItem {
+  id: string
+  quote_id: string
+  line_number: number
+  description: string
+  quantity: number
+  unit_price: number
+  line_total: number
+  created_at: string
+  updated_at: string
 }
 
 export interface Document {

@@ -42,6 +42,28 @@ Your project is live at:
    npm run dev
    ```
 
+## Testing
+
+- Run unit tests:
+
+  ```bash
+  npm run test
+  ```
+
+- Run unit tests with coverage (matches CI):
+
+  ```bash
+  npm run test:coverage
+  ```
+
+- End-to-end tests are not yet implemented. The placeholder command exits with guidance:
+
+  ```bash
+  npm run test:e2e
+  ```
+
+  Enable the `e2e-tests` job in GitHub Actions by defining the repository variable `ENABLE_E2E_TESTS=true` once Playwright specs are ready.
+
 ## Continuing in v0.app
 
 You can keep iterating on the UI and re-sync with v0.app at:

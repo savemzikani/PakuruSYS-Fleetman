@@ -13,6 +13,7 @@ export default function CreateLoadPage() {
   const searchParams = useSearchParams()
 
   const defaultCustomerId = searchParams.get("customer")
+  const quoteId = searchParams.get("quoteId")
 
   const handleSuccess = useCallback(
     (loadId: string) => {
@@ -43,6 +44,7 @@ export default function CreateLoadPage() {
       <LoadForm
         mode="create"
         defaultCustomerId={defaultCustomerId}
+        quoteId={quoteId}
         onSuccess={handleSuccess}
         onCancel={handleCancel}
       />

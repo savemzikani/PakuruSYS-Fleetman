@@ -10,11 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { createClient } from "@/lib/supabase/client"
 import { useUser } from "@/lib/hooks/use-user"
+import { createInvoice } from "../actions"
 import { ArrowLeft, Save, Plus, Trash2 } from "lucide-react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { useState, useEffect } from "react"
-import type { Customer, Load, CurrencyCode } from "@/lib/types/database"
+import { useRouter, useSearchParams } from "next/navigation"
+import { useState, useEffect, useMemo } from "react"
+import type { Customer, Load, CurrencyCode, Quote, QuoteItem } from "@/lib/types/database"
 
 interface InvoiceItem {
   id: string
@@ -24,18 +25,43 @@ interface InvoiceItem {
   total: number
 }
 
+type QuotePrefillContext = {
+  id: string
+  customer_id: string | null
+  load_id: string | null
+}
+
+const createItemId = () =>
+  typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `item_${Math.random().toString(36).slice(2, 10)}`
+
+const createEmptyInvoiceItem = (): InvoiceItem => ({
+  id: createItemId(),
+  description: "",
+  quantity: 1,
+  unit_price: 0,
+  total: 0,
+})
+
 export default function CreateInvoicePage() {
   const { user, loading } = useUser()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loads, setLoads] = useState<Load[]>([])
+  const [isGeneratingNumber, setIsGeneratingNumber] = useState(false)
+  const [quoteContext, setQuoteContext] = useState<QuotePrefillContext | null>(null)
+
+  const supabase = useMemo(() => createClient(), [])
 
   const [formData, setFormData] = useState({
     invoice_number: "",
     customer_id: "",
     load_id: "",
+    quote_id: "",
     invoice_date: new Date().toISOString().split("T")[0],
     due_date: "",
     payment_terms: "30",
@@ -44,29 +70,21 @@ export default function CreateInvoicePage() {
     notes: "",
   })
 
-  const [items, setItems] = useState<InvoiceItem[]>([
-    {
-      id: "1",
-      description: "",
-      quantity: 1,
-      unit_price: 0,
-      total: 0,
-    },
-  ])
+  const [items, setItems] = useState<InvoiceItem[]>([createEmptyInvoiceItem()])
+
+  const quoteId = searchParams.get("quoteId")
 
   // Fetch customers and loads on component mount
   useEffect(() => {
     const fetchData = async () => {
       if (!user?.company_id) return
 
-      const supabase = createClient()
       const [{ data: customersData }, { data: loadsData }] = await Promise.all([
         supabase.from("customers").select("*").eq("company_id", user.company_id).eq("is_active", true).order("name"),
         supabase
           .from("loads")
           .select("*, customer:customers(name)")
           .eq("company_id", user.company_id)
-          .eq("status", "delivered")
           .order("created_at", { ascending: false }),
       ])
 
@@ -74,25 +92,120 @@ export default function CreateInvoicePage() {
       if (loadsData) setLoads(loadsData)
     }
 
-    fetchData()
-  }, [user])
+    const initialize = async () => {
+      await fetchData()
 
-  // Generate invoice number
+      if (!quoteId || !user?.company_id) return
+
+      const { data: quoteData, error: quoteError } = await supabase
+        .from("quotes")
+        .select(
+          `*,
+          items:quote_items(id, line_number, description, quantity, unit_price, line_total),
+          converted_load_id,
+          customer_id
+        `,
+        )
+        .eq("company_id", user.company_id)
+        .eq("id", quoteId)
+        .single()
+
+      if (quoteError || !quoteData) {
+        console.error("Unable to load quote for invoice prefill", quoteError)
+        return
+      }
+
+      const quote = quoteData as Quote & { items?: QuoteItem[] }
+
+      setQuoteContext({
+        id: quote.id,
+        customer_id: quote.customer_id ?? null,
+        load_id: quote.converted_load_id ?? null,
+      })
+
+      setFormData((prev) => ({
+        ...prev,
+        customer_id: quote.customer_id ?? prev.customer_id,
+        load_id: quote.converted_load_id ?? prev.load_id,
+        quote_id: quote.id,
+        currency: (quote.currency as CurrencyCode) ?? prev.currency,
+        tax_rate: quote.tax_rate !== null && quote.tax_rate !== undefined ? quote.tax_rate.toString() : prev.tax_rate,
+        notes: quote.notes ?? prev.notes,
+      }))
+
+      if (quote.items && quote.items.length > 0) {
+        setItems(
+          quote.items
+            .slice()
+            .sort((a, b) => (a.line_number ?? 0) - (b.line_number ?? 0))
+            .map((item) => ({
+              id: createItemId(),
+              description: item.description ?? "",
+              quantity: Number(item.quantity ?? 0) || 0,
+              unit_price: Number(item.unit_price ?? 0) || 0,
+              total: Number(item.line_total ?? 0) || 0,
+            })),
+        )
+      }
+    }
+
+    void initialize()
+  }, [quoteId, supabase, user])
+
+  const buildFallbackInvoiceNumber = () => {
+    const date = new Date()
+    const year = date.getFullYear().toString().slice(-2)
+    const month = (date.getMonth() + 1).toString().padStart(2, "0")
+    const random = Math.floor(Math.random() * 10000)
+      .toString()
+      .padStart(4, "0")
+    return `INV-${year}${month}-${random}`
+  }
+
   useEffect(() => {
-    const generateInvoiceNumber = () => {
-      const date = new Date()
-      const year = date.getFullYear().toString().slice(-2)
-      const month = (date.getMonth() + 1).toString().padStart(2, "0")
-      const random = Math.floor(Math.random() * 1000)
-        .toString()
-        .padStart(3, "0")
-      return `INV${year}${month}${random}`
+    if (!user?.company_id || !formData.customer_id) return
+
+    let cancelled = false
+
+    const generateInvoiceNumber = async () => {
+      setIsGeneratingNumber(true)
+      try {
+        const { data, error } = await supabase.rpc("next_document_number", {
+          doc_type: "invoice",
+          in_company_id: user.company_id,
+          in_customer_id: formData.customer_id,
+        })
+
+        if (error) throw error
+
+        if (!cancelled) {
+          setFormData((prev) => ({
+            ...prev,
+            invoice_number:
+              ((data as string | null) ?? prev.invoice_number) || buildFallbackInvoiceNumber(),
+          }))
+        }
+      } catch (err) {
+        console.error("Failed to generate invoice number", err)
+        if (!cancelled) {
+          setFormData((prev) => ({
+            ...prev,
+            invoice_number: prev.invoice_number || buildFallbackInvoiceNumber(),
+          }))
+        }
+      } finally {
+        if (!cancelled) {
+          setIsGeneratingNumber(false)
+        }
+      }
     }
 
-    if (!formData.invoice_number) {
-      setFormData((prev) => ({ ...prev, invoice_number: generateInvoiceNumber() }))
+    void generateInvoiceNumber()
+
+    return () => {
+      cancelled = true
     }
-  }, [formData.invoice_number])
+  }, [formData.customer_id, supabase, user?.company_id])
 
   // Calculate due date based on payment terms
   useEffect(() => {
@@ -114,40 +227,73 @@ export default function CreateInvoicePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (!user?.company_id) {
+      setError("Missing company information")
+      return
+    }
+
+    const filteredItems = items.filter((item) => item.description.trim() !== "")
+
+    if (filteredItems.length === 0) {
+      setError("Add at least one line item")
+      return
+    }
+
     setIsSubmitting(true)
     setError(null)
 
     try {
-      const supabase = createClient()
+      const invoiceDate = new Date(formData.invoice_date)
 
-      const subtotal = items.reduce((sum, item) => sum + item.total, 0)
-      const taxAmount = subtotal * (Number.parseFloat(formData.tax_rate) / 100)
-      const totalAmount = subtotal + taxAmount
-
-      const invoiceData = {
-        company_id: user.company_id,
-        invoice_number: formData.invoice_number,
-        customer_id: formData.customer_id,
-        load_id: formData.load_id || null,
-        invoice_date: formData.invoice_date,
-        due_date: formData.due_date,
-        payment_terms: Number.parseInt(formData.payment_terms),
-        currency: formData.currency,
-        subtotal,
-        tax_rate: Number.parseFloat(formData.tax_rate),
-        tax_amount: taxAmount,
-        total_amount: totalAmount,
-        status: "pending",
-        notes: formData.notes || null,
-        items: items.filter((item) => item.description.trim() !== ""),
+      if (Number.isNaN(invoiceDate.getTime())) {
+        throw new Error("Invalid invoice date")
       }
 
-      const { error } = await supabase.from("invoices").insert([invoiceData])
+      const dueDateValue = formData.due_date ? new Date(formData.due_date) : null
 
-      if (error) throw error
+      if (formData.due_date && dueDateValue && Number.isNaN(dueDateValue.getTime())) {
+        throw new Error("Invalid due date")
+      }
 
-      router.push("/financial/invoices")
+      const payload = {
+        invoice_number: formData.invoice_number || null,
+        customer_id: formData.customer_id,
+        load_id: formData.load_id || null,
+        source_load_id: formData.load_id || quoteContext?.load_id || null,
+        quote_id: formData.quote_id || null,
+        invoice_date: invoiceDate,
+        due_date: dueDateValue,
+        payment_terms: Number.parseInt(formData.payment_terms, 10),
+        currency: formData.currency,
+        tax_rate: Number.parseFloat(formData.tax_rate),
+        notes: formData.notes || null,
+        items: filteredItems.map((item) => ({
+          id: item.id,
+          description: item.description,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+        })),
+        origin_metadata: quoteContext
+          ? {
+              source: "quote",
+              quote_id: quoteContext.id,
+              load_id: quoteContext.load_id,
+              auto_items: true,
+            }
+          : undefined,
+        auto_items: Boolean(quoteContext),
+      }
+
+      const result = await createInvoice(payload)
+
+      if (!result.success) {
+        throw new Error(result.error ?? "Failed to create invoice")
+      }
+
+      router.push(result.invoiceId ? `/financial/invoices/${result.invoiceId}` : "/financial/invoices")
     } catch (err) {
+      console.error("Invoice creation failed", err)
       setError(err instanceof Error ? err.message : "An error occurred")
     } finally {
       setIsSubmitting(false)
@@ -155,7 +301,24 @@ export default function CreateInvoicePage() {
   }
 
   const handleInputChange = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
+    setFormData((prev) => {
+      if (field === "customer_id") {
+        return {
+          ...prev,
+          customer_id: value,
+          invoice_number: "",
+          quote_id: quoteContext && quoteContext.customer_id === value ? quoteContext.id : "",
+        }
+      }
+      if (field === "load_id" && !value) {
+        return { ...prev, load_id: "" }
+      }
+      return { ...prev, [field]: value }
+    })
+
+    if (field === "customer_id" && quoteContext && quoteContext.customer_id !== value) {
+      setQuoteContext(null)
+    }
   }
 
   const handleItemChange = (id: string, field: keyof InvoiceItem, value: string | number) => {
@@ -174,14 +337,7 @@ export default function CreateInvoicePage() {
   }
 
   const addItem = () => {
-    const newItem: InvoiceItem = {
-      id: Date.now().toString(),
-      description: "",
-      quantity: 1,
-      unit_price: 0,
-      total: 0,
-    }
-    setItems((prev) => [...prev, newItem])
+    setItems((prev) => [...prev, createEmptyInvoiceItem()])
   }
 
   const removeItem = (id: string) => {
@@ -223,7 +379,14 @@ export default function CreateInvoicePage() {
                   required
                   value={formData.invoice_number}
                   onChange={(e) => handleInputChange("invoice_number", e.target.value)}
-                  placeholder="Auto-generated"
+                  placeholder={
+                    isGeneratingNumber
+                      ? "Generating invoice number..."
+                      : formData.customer_id
+                        ? "Auto-generated"
+                        : "Select a customer to generate"
+                  }
+                  className="font-mono"
                 />
               </div>
 

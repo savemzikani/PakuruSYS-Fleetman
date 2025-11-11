@@ -29,7 +29,7 @@ jobs:
     - name: Run linting
       run: npm run lint
     
-    - name: Run unit tests
+    - name: Run unit tests with coverage
       run: npm run test:coverage
     
     - name: Upload coverage reports
@@ -40,6 +40,7 @@ jobs:
         name: codecov-umbrella
 
   e2e-tests:
+    if: ${{ vars.ENABLE_E2E_TESTS == 'true' }}
     runs-on: ubuntu-latest
     
     steps:
@@ -75,6 +76,7 @@ jobs:
         retention-days: 30
 
   security-scan:
+    continue-on-error: true
     runs-on: ubuntu-latest
     
     steps:

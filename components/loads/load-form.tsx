@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { createClient } from "@/lib/supabase/client"
 import { useUser } from "@/lib/hooks/use-user"
+import { createLoad, updateLoad } from "@/app/loads/actions"
 import type { CurrencyCode, Customer, LoadStatus } from "@/lib/types/database"
 
 type LoadFormMode = "create" | "edit"
@@ -20,6 +21,7 @@ interface LoadFormProps {
   mode: LoadFormMode
   loadId?: string
   defaultCustomerId?: string | null
+  quoteId?: string | null
   onSuccess?: (loadId: string) => void
   onCancel?: () => void
 }
@@ -27,6 +29,7 @@ interface LoadFormProps {
 type FormState = {
   load_number: string
   customer_id: string
+  quote_id: string | null
   description: string
   weight_kg: string
   volume_m3: string
@@ -47,6 +50,7 @@ type FormState = {
 const EMPTY_FORM: FormState = {
   load_number: "",
   customer_id: "",
+  quote_id: null,
   description: "",
   weight_kg: "",
   volume_m3: "",
@@ -80,7 +84,7 @@ const CURRENCY_OPTIONS: CurrencyCode[] = ["USD", "ZAR", "BWP", "NAD", "ZWL", "ZM
 
 const STATUS_OPTIONS: LoadStatus[] = ["pending", "assigned", "in_transit", "delivered", "cancelled"]
 
-export function LoadForm({ mode, loadId, defaultCustomerId, onSuccess, onCancel }: LoadFormProps) {
+export function LoadForm({ mode, loadId, defaultCustomerId, quoteId, onSuccess, onCancel }: LoadFormProps) {
   const { user, loading: userLoading } = useUser()
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
@@ -152,29 +156,18 @@ export function LoadForm({ mode, loadId, defaultCustomerId, onSuccess, onCancel 
       const customerCode = getCustomerCode(customerId)
 
       try {
-        const { data, error } = await supabase
-          .from("loads")
-          .select("load_number, created_at")
-          .eq("company_id", user.company_id)
-          .eq("customer_id", customerId)
-          .order("created_at", { ascending: false })
-          .limit(1)
+        const { data, error } = await supabase.rpc("next_document_number", {
+          doc_type: "load",
+          in_company_id: user.company_id,
+          in_customer_id: customerId,
+        })
 
         if (error) throw error
-
-        let nextSequence = 1
-        const lastLoadNumber = data?.[0]?.load_number
-        if (lastLoadNumber) {
-          const match = lastLoadNumber.match(/(\d+)$/)
-          if (match) {
-            nextSequence = Number.parseInt(match[1], 10) + 1
-          }
-        }
 
         if (pendingCustomerIdRef.current === customerId) {
           setFormData((prev) => ({
             ...prev,
-            load_number: buildLoadNumber(customerCode, nextSequence),
+            load_number: data ?? buildLoadNumber(customerCode),
           }))
         }
       } catch (error) {
@@ -216,6 +209,7 @@ export function LoadForm({ mode, loadId, defaultCustomerId, onSuccess, onCancel 
       resetForm({
         load_number: data.load_number ?? "",
         customer_id: data.customer_id ?? "",
+        quote_id: data.quote_id ?? null,
         description: data.description ?? "",
         weight_kg: data.weight_kg ? String(data.weight_kg) : "",
         volume_m3: data.volume_m3 ? String(data.volume_m3) : "",
@@ -244,12 +238,22 @@ export function LoadForm({ mode, loadId, defaultCustomerId, onSuccess, onCancel 
 
     if (defaultCustomerId) {
       initialCustomerHandledRef.current = true
-      setFormData((prev) => ({ ...prev, customer_id: defaultCustomerId }))
+      setFormData((prev) => ({ ...prev, customer_id: defaultCustomerId, quote_id: quoteId ?? prev.quote_id }))
       void generateLoadNumberForCustomer(defaultCustomerId)
     } else {
       initialCustomerHandledRef.current = true
+      if (quoteId) {
+        setFormData((prev) => ({ ...prev, quote_id: quoteId }))
+      }
     }
-  }, [defaultCustomerId, generateLoadNumberForCustomer, mode])
+  }, [defaultCustomerId, generateLoadNumberForCustomer, mode, quoteId])
+
+  useEffect(() => {
+    if (mode !== "create") return
+    if (quoteId) {
+      setFormData((prev) => ({ ...prev, quote_id: quoteId }))
+    }
+  }, [mode, quoteId])
 
   const handleCustomerChange = useCallback(
     (customerId: string) => {
@@ -257,6 +261,7 @@ export function LoadForm({ mode, loadId, defaultCustomerId, onSuccess, onCancel 
         ...prev,
         customer_id: customerId,
         load_number: mode === "create" ? "" : prev.load_number,
+        quote_id: mode === "create" ? null : prev.quote_id,
       }))
 
       if (mode === "create" && customerId) {
@@ -274,7 +279,7 @@ export function LoadForm({ mode, loadId, defaultCustomerId, onSuccess, onCancel 
     async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault()
 
-      if (!user?.company_id || !user.id) {
+      if (!user?.company_id) {
         toast.error("Missing company information")
         return
       }
@@ -293,39 +298,54 @@ export function LoadForm({ mode, loadId, defaultCustomerId, onSuccess, onCancel 
       setIsSubmitting(true)
 
       const payload = {
-        company_id: user.company_id,
         load_number: formData.load_number || null,
         customer_id: formData.customer_id,
+        quote_id: formData.quote_id || null,
         description: formData.description || null,
         weight_kg: formData.weight_kg ? Number.parseFloat(formData.weight_kg) : null,
         volume_m3: formData.volume_m3 ? Number.parseFloat(formData.volume_m3) : null,
-        pickup_address: formData.pickup_address,
+        pickup_address: formData.pickup_address || null,
         pickup_city: formData.pickup_city || null,
         pickup_country: formData.pickup_country || null,
         pickup_date: formData.pickup_date || null,
-        delivery_address: formData.delivery_address,
+        delivery_address: formData.delivery_address || null,
         delivery_city: formData.delivery_city || null,
         delivery_country: formData.delivery_country || null,
         delivery_date: formData.delivery_date || null,
         rate: formData.rate ? Number.parseFloat(formData.rate) : null,
         currency: formData.currency,
         special_instructions: formData.special_instructions || null,
-        status: mode === "create" ? "pending" : formData.status,
-        dispatcher_id: user.id,
+        status: formData.status,
+        origin_metadata: formData.quote_id
+          ? {
+              source: "quote",
+              quote_id: formData.quote_id,
+            }
+          : null,
       }
 
       try {
         if (mode === "create") {
-          const { data, error } = await supabase.from("loads").insert([payload]).select("id").single()
-          if (error) throw error
+          const result = await createLoad({
+            ...payload,
+            status: "pending",
+          })
 
-          const createdId = data?.id as string
+          if (!result.success) {
+            throw new Error(result.error ?? "Failed to create load")
+          }
+
           toast.success("Load created successfully")
-          resetForm({ customer_id: formData.customer_id })
-          onSuccess?.(createdId)
+          resetForm({ customer_id: formData.customer_id, quote_id: formData.quote_id })
+          if (result.loadId) {
+            onSuccess?.(result.loadId)
+          }
         } else if (loadId) {
-          const { error } = await supabase.from("loads").update(payload).eq("id", loadId)
-          if (error) throw error
+          const result = await updateLoad(loadId, payload)
+
+          if (!result.success) {
+            throw new Error(result.error ?? "Failed to update load")
+          }
 
           toast.success("Load updated successfully")
           onSuccess?.(loadId)
@@ -334,12 +354,14 @@ export function LoadForm({ mode, loadId, defaultCustomerId, onSuccess, onCancel 
         router.refresh()
       } catch (error) {
         console.error("Failed to submit load form", error)
-        toast.error("Failed to save load")
+        const message = error instanceof Error ? error.message : "Failed to save load"
+        toast.error(message)
+        setFormError(message)
       } finally {
         setIsSubmitting(false)
       }
     },
-    [formData, loadId, mode, onSuccess, resetForm, router, supabase, user?.company_id, user?.id],
+    [formData, loadId, mode, onSuccess, resetForm, router, user?.company_id],
   )
 
   if (userLoading || (mode === "edit" && isPrefilling)) {

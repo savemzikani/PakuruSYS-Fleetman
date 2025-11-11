@@ -20,10 +20,7 @@ const extractParam = (value?: string | string[]) => (Array.isArray(value) ? valu
 
 const sanitizeSearchTerm = (value: string) => value.replace(/[%_*]/g, "").replace(/,+/g, " ").trim()
 
-const buildIlikePattern = (value: string) => {
-  const sanitized = sanitizeSearchTerm(value)
-  return sanitized ? `*${sanitized}*` : ""
-}
+const buildIlikePattern = (value: string) => (value ? `*${value}*` : "")
 
 const isInvoiceOverdue = (invoice: Invoice) => {
   if (invoice.status === "paid" || invoice.status === "cancelled") {
@@ -79,7 +76,7 @@ export default async function InvoicesPage({
   const statusFilterRaw = extractParam(searchParams?.status).trim() || "all"
   const customerFilterRaw = extractParam(searchParams?.customer).trim() || "all"
   const sanitizedSearchTerm = sanitizeSearchTerm(searchTermRaw)
-  const ilikePattern = buildIlikePattern(searchTermRaw)
+  const ilikePattern = buildIlikePattern(sanitizedSearchTerm)
 
   const nowIso = new Date().toISOString()
 
@@ -132,24 +129,19 @@ export default async function InvoicesPage({
     name: customer.name,
   }))
 
-  const normalizedSearch = sanitizedSearchTerm.toLowerCase()
+  const filteredInvoices = sanitizedSearchTerm
+    ? invoiceList.filter((invoice) => {
+        const normalized = sanitizedSearchTerm.toLowerCase()
+        const tokens = [
+          invoice.invoice_number,
+          invoice.customer?.name ?? "",
+          invoice.load?.load_number ?? "",
+          invoice.notes ?? "",
+        ]
 
-  const filteredInvoices = invoiceList.filter((invoice) => {
-    if (!normalizedSearch) {
-      return true
-    }
-
-    const tokens = [
-      invoice.invoice_number,
-      invoice.customer?.name ?? "",
-      invoice.load?.load_number ?? "",
-      invoice.notes ?? "",
-    ]
-
-    const matchesSearch = tokens.some((token) => token?.toLowerCase().includes(normalizedSearch))
-
-    return matchesSearch
-  })
+        return tokens.some((token) => token?.toLowerCase().includes(normalized))
+      })
+    : invoiceList
 
   // Calculate invoice statistics
   const totalInvoices = invoiceList.length

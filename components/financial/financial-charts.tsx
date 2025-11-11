@@ -28,7 +28,8 @@ interface StatusDatum {
 
 interface FinancialChartsProps {
   revenueData: RevenueDatum[]
-  statusData: StatusDatum[]
+  invoiceStatusData: StatusDatum[]
+  quoteStatusData?: StatusDatum[]
   currency: string
 }
 
@@ -38,9 +39,9 @@ const formatCurrency = (amount: number, currency: string) =>
     currency,
   }).format(amount)
 
-export function FinancialCharts({ revenueData, statusData, currency }: FinancialChartsProps) {
+export function FinancialCharts({ revenueData, invoiceStatusData, quoteStatusData, currency }: FinancialChartsProps) {
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
       <Card>
         <CardHeader>
           <CardTitle>Revenue Trend</CardTitle>
@@ -66,7 +67,7 @@ export function FinancialCharts({ revenueData, statusData, currency }: Financial
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie
-                data={statusData}
+                data={invoiceStatusData}
                 cx="50%"
                 cy="50%"
                 labelLine={false}
@@ -80,7 +81,7 @@ export function FinancialCharts({ revenueData, statusData, currency }: Financial
                 fill="#8884d8"
                 dataKey="value"
               >
-                {statusData.map((entry, index) => (
+                {invoiceStatusData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.color} />
                 ))}
               </Pie>
@@ -91,6 +92,40 @@ export function FinancialCharts({ revenueData, statusData, currency }: Financial
           </ResponsiveContainer>
         </CardContent>
       </Card>
+
+      {quoteStatusData && quoteStatusData.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Quote Status Distribution</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={quoteStatusData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={(props) => {
+                    const { name, percent } = props as PieLabelRenderProps
+                    const labelName = name ?? ""
+                    const ratio = percent ?? 0
+                    return `${labelName} ${(ratio * 100).toFixed(0)}%`
+                  }}
+                  outerRadius={80}
+                  fill="#a855f7"
+                  dataKey="value"
+                >
+                  {quoteStatusData.map((entry, index) => (
+                    <Cell key={`quote-cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value: number, name) => [value, name]} />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   )
 }

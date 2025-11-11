@@ -9,8 +9,8 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { createClient } from "@/lib/supabase/client"
 import { useUser } from "@/lib/hooks/use-user"
+import { createCustomer } from "../actions"
 import { ArrowLeft, Save } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -52,10 +52,11 @@ export default function AddCustomerPage() {
     setError(null)
 
     try {
-      const supabase = createClient()
+      if (!user?.company_id) {
+        throw new Error("Missing company information")
+      }
 
-      const customerData = {
-        company_id: user.company_id,
+      const payload = {
         name: formData.name,
         contact_person: formData.contact_person || null,
         email: formData.email || null,
@@ -66,17 +67,20 @@ export default function AddCustomerPage() {
         postal_code: formData.postal_code || null,
         tax_number: formData.tax_number || null,
         credit_limit: formData.credit_limit ? Number.parseFloat(formData.credit_limit) : 0,
-        payment_terms: Number.parseInt(formData.payment_terms),
+        payment_terms: Number.parseInt(formData.payment_terms, 10),
         is_active: formData.is_active,
       }
 
-      const { error } = await supabase.from("customers").insert([customerData])
+      const result = await createCustomer(payload)
 
-      if (error) throw error
+      if (!result.success) {
+        throw new Error(result.error ?? "Failed to create customer")
+      }
 
-      router.push("/customers")
+      router.push(result.customerId ? `/customers/${result.customerId}` : "/customers")
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred")
+      const message = err instanceof Error ? err.message : "An error occurred"
+      setError(message)
     } finally {
       setIsSubmitting(false)
     }

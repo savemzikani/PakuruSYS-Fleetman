@@ -1,14 +1,23 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useTransition } from "react"
+import type { ChangeEvent } from "react"
 import { useRouter } from "next/navigation"
-import { createClient } from "@/lib/supabase/client"
+import { registerCompanyApplication, type RegisterCompanyApplicationInput } from "./actions"
+import {
+  COUNTRY_OPTIONS,
+  FLEET_SIZE_OPTIONS,
+  VEHICLE_TYPES,
+  OPERATING_REGION_OPTIONS,
+  SPECIALIZATION_OPTIONS,
+} from "@/lib/constants/onboarding"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Truck, Building2, Users, FileText, CheckCircle } from "lucide-react"
 
 const steps = [
@@ -18,13 +27,40 @@ const steps = [
   { id: 4, title: "Review & Submit", icon: FileText },
 ]
 
+type OnboardingFormState = Omit<RegisterCompanyApplicationInput, "taxNumber" | "website"> & {
+  taxNumber: string
+  website: string
+}
+
+const STEP_FIELDS: Record<number, (keyof OnboardingFormState)[]> = {
+  1: ["companyName", "registrationNumber", "country", "city", "address", "phone", "email"],
+  2: ["fleetSize", "vehicleTypes", "operatingRegions", "specializations"],
+  3: [
+    "adminFirstName",
+    "adminLastName",
+    "adminEmail",
+    "adminPhone",
+    "adminPassword",
+    "confirmPassword",
+  ],
+}
+
+const EMAIL_PATTERN = /.+@.+\..+/
+
+type ArrayField = "vehicleTypes" | "operatingRegions" | "specializations"
+
+const CHECKBOX_ERROR_MESSAGES: Record<ArrayField, string> = {
+  vehicleTypes: "Select at least one vehicle type",
+  operatingRegions: "Select at least one operating region",
+  specializations: "Select at least one specialization",
+}
+
 export default function OnboardPage() {
   const [currentStep, setCurrentStep] = useState(1)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [submissionError, setSubmissionError] = useState<string | null>(null)
   const router = useRouter()
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<OnboardingFormState>({
     // Company Information
     companyName: "",
     registrationNumber: "",
@@ -50,72 +86,178 @@ export default function OnboardPage() {
     adminPassword: "",
     confirmPassword: "",
   })
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof OnboardingFormState, string>>>({})
+  const [isPending, startTransition] = useTransition()
+
+  const applyStepErrors = (step: number, errorsForStep: Partial<Record<keyof OnboardingFormState, string>>) => {
+    setFieldErrors((prev) => {
+      const updated = { ...prev }
+      STEP_FIELDS[step]?.forEach((field) => {
+        delete updated[field]
+      })
+      if (Object.keys(errorsForStep).length === 0) {
+        return updated
+      }
+      return { ...updated, ...errorsForStep }
+    })
+  }
+
+  const validateStep = (step: number) => {
+    const errors: Partial<Record<keyof OnboardingFormState, string>> = {}
+
+    switch (step) {
+      case 1: {
+        if (!formData.companyName.trim()) errors.companyName = "Company name is required"
+        if (!formData.registrationNumber.trim()) errors.registrationNumber = "Registration number is required"
+        if (!formData.country.trim()) errors.country = "Select a country"
+        if (!formData.city.trim()) errors.city = "City is required"
+        if (!formData.address.trim()) errors.address = "Business address is required"
+        if (!formData.phone.trim()) errors.phone = "Phone number is required"
+        if (!formData.email.trim()) {
+          errors.email = "Business email is required"
+        } else if (!EMAIL_PATTERN.test(formData.email.trim())) {
+          errors.email = "Enter a valid business email"
+        }
+        break
+      }
+      case 2: {
+        if (!formData.fleetSize.trim()) errors.fleetSize = "Select your fleet size"
+        if (formData.vehicleTypes.length === 0) errors.vehicleTypes = "Select at least one vehicle type"
+        if (formData.operatingRegions.length === 0)
+          errors.operatingRegions = "Select at least one operating region"
+        if (formData.specializations.length === 0)
+          errors.specializations = "Select at least one specialization"
+        break
+      }
+      case 3: {
+        if (!formData.adminFirstName.trim()) errors.adminFirstName = "First name is required"
+        if (!formData.adminLastName.trim()) errors.adminLastName = "Last name is required"
+        if (!formData.adminEmail.trim()) {
+          errors.adminEmail = "Admin email is required"
+        } else if (!EMAIL_PATTERN.test(formData.adminEmail.trim())) {
+          errors.adminEmail = "Enter a valid email address"
+        }
+        if (!formData.adminPhone.trim()) errors.adminPhone = "Admin phone is required"
+        if (!formData.adminPassword.trim()) {
+          errors.adminPassword = "Password is required"
+        } else if (formData.adminPassword.trim().length < 8) {
+          errors.adminPassword = "Password must be at least 8 characters"
+        }
+        if (!formData.confirmPassword.trim()) {
+          errors.confirmPassword = "Confirm your password"
+        } else if (formData.confirmPassword !== formData.adminPassword) {
+          errors.confirmPassword = "Passwords do not match"
+        }
+        break
+      }
+      default:
+        break
+    }
+
+    applyStepErrors(step, errors)
+    return Object.keys(errors).length === 0
+  }
+
+  const validateAllSteps = () => {
+    let firstInvalidStep: number | null = null
+
+    ;[1, 2, 3].forEach((step) => {
+      const isValid = validateStep(step)
+      if (!isValid && firstInvalidStep === null) {
+        firstInvalidStep = step
+      }
+    })
+
+    if (firstInvalidStep !== null) {
+      setCurrentStep(firstInvalidStep)
+      return false
+    }
+
+    return true
+  }
+
+  const updateField = <K extends keyof OnboardingFormState>(field: K, value: OnboardingFormState[K]) => {
+    setFormData((prev) => ({
+      ...prev,
+      [field]: value,
+    }))
+
+    setFieldErrors((prev) => {
+      if (!(field in prev)) {
+        return prev
+      }
+      const updated = { ...prev }
+      delete updated[field]
+      return updated
+    })
+  }
+
+  const handleCheckboxChange = (field: ArrayField, value: string) => (event: ChangeEvent<HTMLInputElement>) => {
+    const { checked } = event.target
+    let nextValues: string[] = []
+
+    setFormData((prev) => {
+      const current = prev[field]
+      nextValues = checked ? [...current, value] : current.filter((item) => item !== value)
+      return {
+        ...prev,
+        [field]: nextValues,
+      }
+    })
+
+    setFieldErrors((prev) => {
+      const updated = { ...prev }
+      if (nextValues.length > 0) {
+        delete updated[field]
+      } else {
+        updated[field] = CHECKBOX_ERROR_MESSAGES[field]
+      }
+      return updated
+    })
+  }
 
   const handleNext = () => {
-    if (currentStep < 4) setCurrentStep(currentStep + 1)
+    if (currentStep < 4) {
+      const isValid = validateStep(currentStep)
+      if (!isValid) {
+        return
+      }
+      setCurrentStep(currentStep + 1)
+    }
   }
 
   const handlePrevious = () => {
     if (currentStep > 1) setCurrentStep(currentStep - 1)
   }
 
-  const handleSubmit = async () => {
-    setIsLoading(true)
-    setError(null)
+  const handleSubmit = () => {
+    setSubmissionError(null)
 
-    if (formData.adminPassword !== formData.confirmPassword) {
-      setError("Passwords do not match")
-      setIsLoading(false)
+    if (!validateAllSteps()) {
       return
     }
 
-    try {
-      const supabase = createClient()
-      const isDevelopment = process.env.NODE_ENV === "development"
+    const { taxNumber, website, ...rest } = formData
 
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: formData.adminEmail,
-        password: formData.adminPassword,
-        options: {
-          emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/dashboard`,
-          data: {
-            first_name: formData.adminFirstName,
-            last_name: formData.adminLastName,
-            role: "company_admin",
-          },
-          ...(isDevelopment && { emailRedirectTo: undefined }),
-        },
-      })
-
-      if (authError) throw authError
-
-      // Create company application record
-      const { error: companyError } = await supabase.from("company_applications").insert({
-        company_name: formData.companyName,
-        registration_number: formData.registrationNumber,
-        tax_number: formData.taxNumber,
-        country: formData.country,
-        city: formData.city,
-        address: formData.address,
-        phone: formData.phone,
-        email: formData.email,
-        website: formData.website,
-        fleet_size: Number.parseInt(formData.fleetSize),
-        vehicle_types: formData.vehicleTypes,
-        operating_regions: formData.operatingRegions,
-        specializations: formData.specializations,
-        admin_user_id: authData.user?.id,
-        status: "pending",
-      })
-
-      if (companyError) throw companyError
-
-      router.push("/onboard/success")
-    } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred")
-    } finally {
-      setIsLoading(false)
+    const payload: RegisterCompanyApplicationInput = {
+      ...rest,
+      taxNumber: taxNumber.trim() ? taxNumber.trim() : null,
+      website: website.trim() ? website.trim() : null,
     }
+
+    startTransition(async () => {
+      try {
+        const result = await registerCompanyApplication(payload)
+        if (!result.success) {
+          setSubmissionError(result.error)
+          return
+        }
+        router.push("/onboard/success")
+      } catch (submissionError) {
+        console.error("[onboard] submission failed", submissionError)
+        setSubmissionError("Something went wrong while submitting your application. Please try again.")
+      }
+    })
   }
 
   const renderStepContent = () => {
@@ -130,8 +272,10 @@ export default function OnboardPage() {
                   id="companyName"
                   required
                   value={formData.companyName}
-                  onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
+                  onChange={(e) => updateField("companyName", e.target.value)}
+                  aria-invalid={Boolean(fieldErrors.companyName)}
                 />
+                {fieldErrors.companyName && <p className="text-sm text-destructive">{fieldErrors.companyName}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="registrationNumber">Registration Number *</Label>
@@ -139,8 +283,12 @@ export default function OnboardPage() {
                   id="registrationNumber"
                   required
                   value={formData.registrationNumber}
-                  onChange={(e) => setFormData({ ...formData, registrationNumber: e.target.value })}
+                  onChange={(e) => updateField("registrationNumber", e.target.value)}
+                  aria-invalid={Boolean(fieldErrors.registrationNumber)}
                 />
+                {fieldErrors.registrationNumber && (
+                  <p className="text-sm text-destructive">{fieldErrors.registrationNumber}</p>
+                )}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -149,30 +297,27 @@ export default function OnboardPage() {
                 <Input
                   id="taxNumber"
                   value={formData.taxNumber}
-                  onChange={(e) => setFormData({ ...formData, taxNumber: e.target.value })}
+                  onChange={(e) => updateField("taxNumber", e.target.value)}
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="country">Country *</Label>
                 <Select
                   value={formData.country}
-                  onValueChange={(value) => setFormData({ ...formData, country: value })}
+                  onValueChange={(value) => updateField("country", value)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select country" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="south-africa">South Africa</SelectItem>
-                    <SelectItem value="botswana">Botswana</SelectItem>
-                    <SelectItem value="namibia">Namibia</SelectItem>
-                    <SelectItem value="zambia">Zambia</SelectItem>
-                    <SelectItem value="zimbabwe">Zimbabwe</SelectItem>
-                    <SelectItem value="mozambique">Mozambique</SelectItem>
-                    <SelectItem value="malawi">Malawi</SelectItem>
-                    <SelectItem value="lesotho">Lesotho</SelectItem>
-                    <SelectItem value="eswatini">Eswatini</SelectItem>
+                    {COUNTRY_OPTIONS.map((country) => (
+                      <SelectItem key={country} value={country}>
+                        {country}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+                {fieldErrors.country && <p className="text-sm text-destructive">{fieldErrors.country}</p>}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -182,8 +327,10 @@ export default function OnboardPage() {
                   id="city"
                   required
                   value={formData.city}
-                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                  onChange={(e) => updateField("city", e.target.value)}
+                  aria-invalid={Boolean(fieldErrors.city)}
                 />
+                {fieldErrors.city && <p className="text-sm text-destructive">{fieldErrors.city}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="phone">Phone Number *</Label>
@@ -191,8 +338,10 @@ export default function OnboardPage() {
                   id="phone"
                   required
                   value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  onChange={(e) => updateField("phone", e.target.value)}
+                  aria-invalid={Boolean(fieldErrors.phone)}
                 />
+                {fieldErrors.phone && <p className="text-sm text-destructive">{fieldErrors.phone}</p>}
               </div>
             </div>
             <div className="space-y-2">
@@ -201,8 +350,10 @@ export default function OnboardPage() {
                 id="address"
                 required
                 value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                onChange={(e) => updateField("address", e.target.value)}
+                aria-invalid={Boolean(fieldErrors.address)}
               />
+              {fieldErrors.address && <p className="text-sm text-destructive">{fieldErrors.address}</p>}
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -212,15 +363,17 @@ export default function OnboardPage() {
                   type="email"
                   required
                   value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  onChange={(e) => updateField("email", e.target.value)}
+                  aria-invalid={Boolean(fieldErrors.email)}
                 />
+                {fieldErrors.email && <p className="text-sm text-destructive">{fieldErrors.email}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="website">Website</Label>
                 <Input
                   id="website"
                   value={formData.website}
-                  onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                  onChange={(e) => updateField("website", e.target.value)}
                 />
               </div>
             </div>
@@ -234,95 +387,72 @@ export default function OnboardPage() {
               <Label htmlFor="fleetSize">Fleet Size *</Label>
               <Select
                 value={formData.fleetSize}
-                onValueChange={(value) => setFormData({ ...formData, fleetSize: value })}
+                onValueChange={(value) => updateField("fleetSize", value)}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select fleet size" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="1-5">1-5 vehicles</SelectItem>
-                  <SelectItem value="6-20">6-20 vehicles</SelectItem>
-                  <SelectItem value="21-50">21-50 vehicles</SelectItem>
-                  <SelectItem value="51-100">51-100 vehicles</SelectItem>
-                  <SelectItem value="100+">100+ vehicles</SelectItem>
+                  {FLEET_SIZE_OPTIONS.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option} vehicles
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
+              {fieldErrors.fleetSize && <p className="text-sm text-destructive">{fieldErrors.fleetSize}</p>}
             </div>
             <div className="space-y-2">
               <Label>Vehicle Types (Select all that apply)</Label>
               <div className="grid grid-cols-2 gap-2">
-                {["Truck", "Trailer", "Tanker", "Flatbed", "Refrigerated", "Container"].map((type) => (
+                {VEHICLE_TYPES.map((type) => (
                   <label key={type} className="flex items-center space-x-2">
                     <input
                       type="checkbox"
                       checked={formData.vehicleTypes.includes(type)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setFormData({ ...formData, vehicleTypes: [...formData.vehicleTypes, type] })
-                        } else {
-                          setFormData({ ...formData, vehicleTypes: formData.vehicleTypes.filter((t) => t !== type) })
-                        }
-                      }}
+                      onChange={handleCheckboxChange("vehicleTypes", type)}
                     />
                     <span>{type}</span>
                   </label>
                 ))}
               </div>
+              {fieldErrors.vehicleTypes && <p className="text-sm text-destructive">{fieldErrors.vehicleTypes}</p>}
             </div>
             <div className="space-y-2">
               <Label>Operating Regions (Select all that apply)</Label>
               <div className="grid grid-cols-2 gap-2">
-                {["Local", "Regional", "Cross-border", "International"].map((region) => (
+                {OPERATING_REGION_OPTIONS.map((region) => (
                   <label key={region} className="flex items-center space-x-2">
                     <input
                       type="checkbox"
                       checked={formData.operatingRegions.includes(region)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setFormData({ ...formData, operatingRegions: [...formData.operatingRegions, region] })
-                        } else {
-                          setFormData({
-                            ...formData,
-                            operatingRegions: formData.operatingRegions.filter((r) => r !== region),
-                          })
-                        }
-                      }}
+                      onChange={handleCheckboxChange("operatingRegions", region)}
                     />
                     <span>{region}</span>
                   </label>
                 ))}
               </div>
+              {fieldErrors.operatingRegions && (
+                <p className="text-sm text-destructive">{fieldErrors.operatingRegions}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Specializations (Select all that apply)</Label>
               <div className="grid grid-cols-2 gap-2">
-                {[
-                  "General Freight",
-                  "Mining",
-                  "Agriculture",
-                  "Fuel Transport",
-                  "Hazardous Materials",
-                  "Perishables",
-                ].map((spec) => (
+                {SPECIALIZATION_OPTIONS.map((spec) => (
                   <label key={spec} className="flex items-center space-x-2">
                     <input
                       type="checkbox"
                       checked={formData.specializations.includes(spec)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setFormData({ ...formData, specializations: [...formData.specializations, spec] })
-                        } else {
-                          setFormData({
-                            ...formData,
-                            specializations: formData.specializations.filter((s) => s !== spec),
-                          })
-                        }
-                      }}
+                      onChange={handleCheckboxChange("specializations", spec)}
                     />
                     <span>{spec}</span>
                   </label>
                 ))}
               </div>
+              {fieldErrors.specializations && (
+                <p className="text-sm text-destructive">{fieldErrors.specializations}</p>
+              )}
             </div>
           </div>
         )
@@ -337,8 +467,12 @@ export default function OnboardPage() {
                   id="adminFirstName"
                   required
                   value={formData.adminFirstName}
-                  onChange={(e) => setFormData({ ...formData, adminFirstName: e.target.value })}
+                  onChange={(e) => updateField("adminFirstName", e.target.value)}
+                  aria-invalid={Boolean(fieldErrors.adminFirstName)}
                 />
+                {fieldErrors.adminFirstName && (
+                  <p className="text-sm text-destructive">{fieldErrors.adminFirstName}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="adminLastName">Last Name *</Label>
@@ -346,8 +480,10 @@ export default function OnboardPage() {
                   id="adminLastName"
                   required
                   value={formData.adminLastName}
-                  onChange={(e) => setFormData({ ...formData, adminLastName: e.target.value })}
+                  onChange={(e) => updateField("adminLastName", e.target.value)}
+                  aria-invalid={Boolean(fieldErrors.adminLastName)}
                 />
+                {fieldErrors.adminLastName && <p className="text-sm text-destructive">{fieldErrors.adminLastName}</p>}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -358,8 +494,10 @@ export default function OnboardPage() {
                   type="email"
                   required
                   value={formData.adminEmail}
-                  onChange={(e) => setFormData({ ...formData, adminEmail: e.target.value })}
+                  onChange={(e) => updateField("adminEmail", e.target.value)}
+                  aria-invalid={Boolean(fieldErrors.adminEmail)}
                 />
+                {fieldErrors.adminEmail && <p className="text-sm text-destructive">{fieldErrors.adminEmail}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="adminPhone">Phone Number *</Label>
@@ -367,8 +505,10 @@ export default function OnboardPage() {
                   id="adminPhone"
                   required
                   value={formData.adminPhone}
-                  onChange={(e) => setFormData({ ...formData, adminPhone: e.target.value })}
+                  onChange={(e) => updateField("adminPhone", e.target.value)}
+                  aria-invalid={Boolean(fieldErrors.adminPhone)}
                 />
+                {fieldErrors.adminPhone && <p className="text-sm text-destructive">{fieldErrors.adminPhone}</p>}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -379,8 +519,12 @@ export default function OnboardPage() {
                   type="password"
                   required
                   value={formData.adminPassword}
-                  onChange={(e) => setFormData({ ...formData, adminPassword: e.target.value })}
+                  onChange={(e) => updateField("adminPassword", e.target.value)}
+                  aria-invalid={Boolean(fieldErrors.adminPassword)}
                 />
+                {fieldErrors.adminPassword && (
+                  <p className="text-sm text-destructive">{fieldErrors.adminPassword}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="confirmPassword">Confirm Password *</Label>
@@ -389,8 +533,12 @@ export default function OnboardPage() {
                   type="password"
                   required
                   value={formData.confirmPassword}
-                  onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                  onChange={(e) => updateField("confirmPassword", e.target.value)}
+                  aria-invalid={Boolean(fieldErrors.confirmPassword)}
                 />
+                {fieldErrors.confirmPassword && (
+                  <p className="text-sm text-destructive">{fieldErrors.confirmPassword}</p>
+                )}
               </div>
             </div>
           </div>
@@ -501,7 +649,11 @@ export default function OnboardPage() {
           <CardContent>
             {renderStepContent()}
 
-            {error && <div className="mt-4 text-sm text-red-600 bg-red-50 p-3 rounded-md">{error}</div>}
+            {submissionError && (
+              <Alert variant="destructive" className="mt-4">
+                <AlertDescription>{submissionError}</AlertDescription>
+              </Alert>
+            )}
 
             <div className="flex justify-between mt-6">
               <Button variant="outline" onClick={handlePrevious} disabled={currentStep === 1}>
@@ -509,10 +661,12 @@ export default function OnboardPage() {
               </Button>
 
               {currentStep < 4 ? (
-                <Button onClick={handleNext}>Next</Button>
+                <Button onClick={handleNext} disabled={isPending}>
+                  Next
+                </Button>
               ) : (
-                <Button onClick={handleSubmit} disabled={isLoading}>
-                  {isLoading ? "Submitting..." : "Submit Application"}
+                <Button onClick={handleSubmit} disabled={isPending}>
+                  {isPending ? "Submitting..." : "Submit Application"}
                 </Button>
               )}
             </div>

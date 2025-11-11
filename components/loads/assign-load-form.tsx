@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
@@ -28,11 +28,14 @@ interface VehicleOption {
   id: string
   label: string
   status: Vehicle["status"]
+  assignedDriverId?: string | null
+  assignedDriverName?: string | null
 }
 
 interface DriverOption {
   id: string
   label: string
+  note?: string
 }
 
 export function AssignLoadForm({ loadId, onSuccess, onCancel }: AssignLoadFormProps) {
@@ -53,6 +56,12 @@ export function AssignLoadForm({ loadId, onSuccess, onCancel }: AssignLoadFormPr
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
+  const [vehicleAssignments, setVehicleAssignments] = useState<Record<string, { driverId: string; driverName: string }>>({})
+  const [driverAssignments, setDriverAssignments] = useState<Record<string, { vehicleId: string; vehicleLabel: string }>>({})
+  const [vehicleInfoMessage, setVehicleInfoMessage] = useState<string | null>(null)
+  const [driverInfoMessage, setDriverInfoMessage] = useState<string | null>(null)
+  const autoSyncDriverRef = useRef(true)
+
   const loadResources = useCallback(async () => {
     if (!user?.company_id) return
 
@@ -61,7 +70,18 @@ export function AssignLoadForm({ loadId, onSuccess, onCancel }: AssignLoadFormPr
       const [vehiclesResult, driversResult, loadResult] = await Promise.all([
         supabase
           .from("vehicles")
-          .select("id, registration_number, make, model, status")
+          .select(
+            `id,
+            registration_number,
+            make,
+            model,
+            status,
+            assignments:vehicle_driver_assignments(
+              driver_id,
+              released_at,
+              driver:drivers(first_name, last_name)
+            )`
+          )
           .eq("company_id", user.company_id)
           .eq("status", "active")
           .order("registration_number", { ascending: true }),
@@ -89,26 +109,67 @@ export function AssignLoadForm({ loadId, onSuccess, onCancel }: AssignLoadFormPr
         throw loadResult.error
       }
 
-      const vehicleOpts = (vehiclesResult.data ?? []).map((vehicle: Vehicle) => ({
-        id: vehicle.id,
-        status: vehicle.status,
-        label: [vehicle.registration_number, vehicle.make, vehicle.model]
-          .filter(Boolean)
-          .join(" · "),
-      }))
+      type VehicleRow = Vehicle & {
+        assignments?: {
+          driver_id: string | null
+          released_at: string | null
+          driver?: { first_name: string | null; last_name: string | null } | null
+        }[]
+      }
+
+      const vehicleLabelMap: Record<string, string> = {}
+      const vehicleAssignMap: Record<string, { driverId: string; driverName: string }> = {}
+      const driverAssignMap: Record<string, { vehicleId: string; vehicleLabel: string }> = {}
+
+      const vehicleOpts = (vehiclesResult.data ?? []).map((vehicle: VehicleRow) => {
+        const labelParts = [vehicle.registration_number, vehicle.make, vehicle.model].filter(Boolean)
+        const label = labelParts.join(" · ") || "Unlabeled vehicle"
+        vehicleLabelMap[vehicle.id] = label
+
+        const activeAssignment =
+          vehicle.assignments?.find((assignment) => assignment.released_at === null && assignment.driver_id) ?? null
+
+        let assignedDriverId: string | null = null
+        let assignedDriverName: string | null = null
+
+        if (activeAssignment?.driver_id) {
+          assignedDriverId = activeAssignment.driver_id
+          assignedDriverName = `${activeAssignment.driver?.first_name ?? ""} ${activeAssignment.driver?.last_name ?? ""}`.trim()
+          vehicleAssignMap[vehicle.id] = { driverId: assignedDriverId, driverName: assignedDriverName }
+          driverAssignMap[assignedDriverId] = { vehicleId: vehicle.id, vehicleLabel: label }
+        }
+
+        return {
+          id: vehicle.id,
+          status: vehicle.status,
+          label,
+          assignedDriverId,
+          assignedDriverName,
+        }
+      }) as VehicleOption[]
       setVehicleOptions(vehicleOpts)
 
-      const driverOpts = (driversResult.data ?? []).map((driver: Driver) => ({
-        id: driver.id,
-        label: `${driver.first_name} ${driver.last_name}`.trim(),
-      }))
+      const driverOpts = (driversResult.data ?? []).map((driver: Driver) => {
+        const name = `${driver.first_name} ${driver.last_name}`.trim()
+        const assignment = driverAssignMap[driver.id]
+
+        return {
+          id: driver.id,
+          label: name,
+          note: assignment ? `Assigned to ${assignment.vehicleLabel}` : undefined,
+        }
+      })
       setDriverOptions(driverOpts)
+
+      setVehicleAssignments(vehicleAssignMap)
+      setDriverAssignments(driverAssignMap)
 
       setSelectedVehicleId(loadResult.data?.assigned_vehicle_id ?? "")
       setSelectedDriverId(loadResult.data?.assigned_driver_id ?? "")
       setInitialVehicleId(loadResult.data?.assigned_vehicle_id ?? null)
       setInitialDriverId(loadResult.data?.assigned_driver_id ?? null)
       setCurrentStatus((loadResult.data?.status as LoadStatus) ?? "pending")
+      autoSyncDriverRef.current = false
     } catch (error) {
       console.error("Failed to load assignment resources", error)
       toast.error("Unable to load assignment data")
@@ -121,6 +182,52 @@ export function AssignLoadForm({ loadId, onSuccess, onCancel }: AssignLoadFormPr
     void loadResources()
   }, [loadResources])
 
+  useEffect(() => {
+    if (!selectedVehicleId) {
+      setVehicleInfoMessage(null)
+      return
+    }
+
+    const assignment = vehicleAssignments[selectedVehicleId]
+    if (assignment) {
+      setVehicleInfoMessage(`Vehicle currently paired with ${assignment.driverName}.`)
+      if (autoSyncDriverRef.current) {
+        setSelectedDriverId(assignment.driverId)
+        autoSyncDriverRef.current = false
+      }
+    } else {
+      setVehicleInfoMessage(null)
+      if (autoSyncDriverRef.current) {
+        setSelectedDriverId("")
+        autoSyncDriverRef.current = false
+      }
+    }
+  }, [selectedVehicleId, vehicleAssignments])
+
+  useEffect(() => {
+    if (!selectedDriverId) {
+      setDriverInfoMessage(null)
+      return
+    }
+
+    const assignment = driverAssignments[selectedDriverId]
+    if (assignment && assignment.vehicleId !== selectedVehicleId) {
+      setDriverInfoMessage(`Driver currently assigned to ${assignment.vehicleLabel}.`)
+    } else {
+      setDriverInfoMessage(null)
+    }
+  }, [driverAssignments, selectedDriverId, selectedVehicleId])
+
+  const handleVehicleChange = useCallback((value: string) => {
+    autoSyncDriverRef.current = true
+    setSelectedVehicleId(value)
+  }, [])
+
+  const handleDriverChange = useCallback((value: string) => {
+    autoSyncDriverRef.current = false
+    setSelectedDriverId(value)
+  }, [])
+
   const handleSubmit = useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault()
@@ -132,6 +239,18 @@ export function AssignLoadForm({ loadId, onSuccess, onCancel }: AssignLoadFormPr
 
       if (!selectedVehicleId || !selectedDriverId) {
         setFormError("Select both a vehicle and driver to continue")
+        return
+      }
+
+      const vehicleAssignment = selectedVehicleId ? vehicleAssignments[selectedVehicleId] : undefined
+      if (vehicleAssignment && vehicleAssignment.driverId && vehicleAssignment.driverId !== selectedDriverId) {
+        setFormError(`Vehicle is paired with ${vehicleAssignment.driverName}. Update the vehicle assignment first.`)
+        return
+      }
+
+      const driverAssignment = selectedDriverId ? driverAssignments[selectedDriverId] : undefined
+      if (driverAssignment && driverAssignment.vehicleId && driverAssignment.vehicleId !== selectedVehicleId) {
+        setFormError(`Driver is currently assigned to ${driverAssignment.vehicleLabel}. Unassign them first.`)
         return
       }
 
@@ -188,6 +307,7 @@ export function AssignLoadForm({ loadId, onSuccess, onCancel }: AssignLoadFormPr
     [
       assignmentNote,
       currentStatus,
+      driverAssignments,
       driverOptions,
       initialDriverId,
       initialVehicleId,
@@ -199,6 +319,7 @@ export function AssignLoadForm({ loadId, onSuccess, onCancel }: AssignLoadFormPr
       supabase,
       user?.company_id,
       user?.id,
+      vehicleAssignments,
       vehicleOptions,
     ],
   )
@@ -232,7 +353,7 @@ export function AssignLoadForm({ loadId, onSuccess, onCancel }: AssignLoadFormPr
       <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="vehicle">Vehicle *</Label>
-          <Select value={selectedVehicleId} onValueChange={setSelectedVehicleId} disabled={vehicleOptions.length === 0}>
+          <Select value={selectedVehicleId} onValueChange={handleVehicleChange} disabled={vehicleOptions.length === 0}>
             <SelectTrigger id="vehicle">
               <SelectValue placeholder="Select an available vehicle" />
             </SelectTrigger>
@@ -242,17 +363,23 @@ export function AssignLoadForm({ loadId, onSuccess, onCancel }: AssignLoadFormPr
               ) : (
                 vehicleOptions.map((vehicle) => (
                   <SelectItem key={vehicle.id} value={vehicle.id}>
-                    {vehicle.label}
+                    <span className="flex flex-col">
+                      <span>{vehicle.label}</span>
+                      {vehicle.assignedDriverName ? (
+                        <span className="text-xs text-muted-foreground">Driver: {vehicle.assignedDriverName}</span>
+                      ) : null}
+                    </span>
                   </SelectItem>
                 ))
               )}
             </SelectContent>
           </Select>
+          {vehicleInfoMessage ? <p className="text-xs text-muted-foreground">{vehicleInfoMessage}</p> : null}
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="driver">Driver *</Label>
-          <Select value={selectedDriverId} onValueChange={setSelectedDriverId} disabled={driverOptions.length === 0}>
+          <Select value={selectedDriverId} onValueChange={handleDriverChange} disabled={driverOptions.length === 0}>
             <SelectTrigger id="driver">
               <SelectValue placeholder="Select an available driver" />
             </SelectTrigger>
@@ -262,12 +389,16 @@ export function AssignLoadForm({ loadId, onSuccess, onCancel }: AssignLoadFormPr
               ) : (
                 driverOptions.map((driver) => (
                   <SelectItem key={driver.id} value={driver.id}>
-                    {driver.label}
+                    <span className="flex flex-col">
+                      <span>{driver.label}</span>
+                      {driver.note ? <span className="text-xs text-muted-foreground">{driver.note}</span> : null}
+                    </span>
                   </SelectItem>
                 ))
               )}
             </SelectContent>
           </Select>
+          {driverInfoMessage ? <p className="text-xs text-muted-foreground">{driverInfoMessage}</p> : null}
         </div>
 
         <div className="space-y-2">

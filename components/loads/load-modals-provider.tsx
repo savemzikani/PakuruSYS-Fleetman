@@ -5,14 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import { LoadForm } from "@/components/loads/load-form"
 import { AssignLoadForm } from "@/components/loads/assign-load-form"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 type ModalType = "edit-load" | "assign-load" | null
 
@@ -30,7 +23,7 @@ function useUrlParamUpdater() {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const [_, startTransition] = useTransition()
+  const [, startTransition] = useTransition()
 
   return useCallback(
     (updater: (params: URLSearchParams) => void, options: { replace?: boolean } = {}) => {
